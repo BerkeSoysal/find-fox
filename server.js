@@ -1,0 +1,731 @@
+/**
+ * Fox Game - WebSocket Server
+ * Real-time online multiplayer server for the Fox Game
+ */
+
+const WebSocket = require('ws');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+// Word packs (same as client)
+const WORD_PACKS = {
+    animals: {
+        name: 'Animals',
+        icon: '🦁',
+        words: ['Lion', 'Eagle', 'Dolphin', 'Elephant', 'Tiger', 'Penguin', 'Giraffe', 'Wolf',
+            'Bear', 'Shark', 'Owl', 'Fox', 'Rabbit', 'Snake', 'Monkey', 'Whale']
+    },
+    food: {
+        name: 'Food',
+        icon: '🍕',
+        words: ['Pizza', 'Sushi', 'Burger', 'Pasta', 'Tacos', 'Steak', 'Salad', 'Ramen',
+            'Curry', 'Sandwich', 'Soup', 'Ice Cream', 'Pancakes', 'Fries', 'Chicken', 'Rice']
+    },
+    sports: {
+        name: 'Sports',
+        icon: '⚽',
+        words: ['Soccer', 'Basketball', 'Tennis', 'Swimming', 'Golf', 'Boxing', 'Skiing', 'Rugby',
+            'Baseball', 'Hockey', 'Volleyball', 'Cycling', 'Surfing', 'Wrestling', 'Archery', 'Fencing']
+    },
+    movies: {
+        name: 'Movies',
+        icon: '🎬',
+        words: ['Titanic', 'Avatar', 'Inception', 'Frozen', 'Joker', 'Matrix', 'Gladiator', 'Shrek',
+            'Jaws', 'Rocky', 'Alien', 'Psycho', 'Bambi', 'Grease', 'Minions', 'Up']
+    },
+    countries: {
+        name: 'Countries',
+        icon: '🌍',
+        words: ['Japan', 'France', 'Brazil', 'Egypt', 'Canada', 'Italy', 'Mexico', 'India',
+            'Greece', 'Sweden', 'Kenya', 'Spain', 'Turkey', 'Peru', 'China', 'Norway']
+    },
+    jobs: {
+        name: 'Jobs',
+        icon: '👔',
+        words: ['Doctor', 'Teacher', 'Chef', 'Pilot', 'Artist', 'Lawyer', 'Farmer', 'Actor',
+            'Nurse', 'Police', 'Firefighter', 'Engineer', 'Writer', 'Dentist', 'Astronaut', 'DJ']
+    },
+    places: {
+        name: 'Places',
+        icon: '🏛️',
+        words: ['Beach', 'Museum', 'Airport', 'Hospital', 'Library', 'Stadium', 'Casino', 'Zoo',
+            'Church', 'School', 'Prison', 'Farm', 'Theater', 'Gym', 'Mall', 'Restaurant']
+    },
+    objects: {
+        name: 'Objects',
+        icon: '📦',
+        words: ['Phone', 'Mirror', 'Clock', 'Lamp', 'Chair', 'Umbrella', 'Camera', 'Piano',
+            'Bicycle', 'Telescope', 'Hammer', 'Candle', 'Book', 'Wallet', 'Glasses', 'Key']
+    },
+    emotions: {
+        name: 'Emotions',
+        icon: '😊',
+        words: ['Happy', 'Sad', 'Angry', 'Scared', 'Excited', 'Confused', 'Proud', 'Jealous',
+            'Nervous', 'Relaxed', 'Bored', 'Surprised', 'Tired', 'Hopeful', 'Grateful', 'Anxious']
+    }
+};
+
+// Game phases
+const PHASES = {
+    LOBBY: 'lobby',
+    ROLE_REVEAL: 'role_reveal',
+    HINT_WRITING: 'hint_writing',
+    HINTS_REVEAL: 'hints_reveal',
+    VOTING: 'voting',
+    ESCAPE: 'escape',
+    RESULTS: 'results'
+};
+
+// Room storage
+const rooms = new Map();
+
+// Generate unique room code
+function generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code;
+    do {
+        code = '';
+        for (let i = 0; i < 4; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+    } while (rooms.has(code));
+    return code;
+}
+
+// Generate unique player ID
+function generatePlayerId() {
+    return 'p_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Create a new room
+function createRoom(hostId, hostName) {
+    const code = generateRoomCode();
+    const room = {
+        code,
+        hostId,
+        phase: PHASES.LOBBY,
+        players: new Map(),
+        topic: null,
+        words: [],
+        secretWord: null,
+        foxId: null,
+        hints: new Map(),
+        votes: new Map(),
+        scores: new Map(),
+        peekPlayerId: null,
+        escapeGuess: null,
+        roundNumber: 0
+    };
+
+    room.players.set(hostId, {
+        id: hostId,
+        name: hostName,
+        connected: true,
+        ws: null
+    });
+    room.scores.set(hostId, 0);
+
+    rooms.set(code, room);
+    return room;
+}
+
+// Get room by code
+function getRoom(code) {
+    return rooms.get(code?.toUpperCase());
+}
+
+// Broadcast to all players in a room
+function broadcast(room, message, excludeId = null) {
+    const data = JSON.stringify(message);
+    room.players.forEach((player, playerId) => {
+        if (playerId !== excludeId && player.ws && player.ws.readyState === WebSocket.OPEN) {
+            player.ws.send(data);
+        }
+    });
+}
+
+// Send to specific player
+function sendTo(room, playerId, message) {
+    const player = room.players.get(playerId);
+    if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
+        player.ws.send(JSON.stringify(message));
+    }
+}
+
+// Get players list for client
+function getPlayersList(room) {
+    return Array.from(room.players.entries()).map(([id, p]) => ({
+        id,
+        name: p.name,
+        connected: p.connected,
+        isHost: id === room.hostId,
+        hasHint: room.hints.has(id),
+        hasVoted: room.votes.has(id)
+    }));
+}
+
+// Start a new game round
+function startGame(room, topic) {
+    const pack = WORD_PACKS[topic];
+    if (!pack) return false;
+
+    room.topic = topic;
+    room.words = [...pack.words];
+    room.secretWord = room.words[Math.floor(Math.random() * room.words.length)];
+    room.hints.clear();
+    room.votes.clear();
+    room.escapeGuess = null;
+    room.roundNumber++;
+
+    // Select random fox
+    const playerIds = Array.from(room.players.keys());
+    room.foxId = playerIds[Math.floor(Math.random() * playerIds.length)];
+
+    // Select random player for fox peek (not the fox)
+    const nonFoxIds = playerIds.filter(id => id !== room.foxId);
+    room.peekPlayerId = nonFoxIds[Math.floor(Math.random() * nonFoxIds.length)];
+
+    room.phase = PHASES.ROLE_REVEAL;
+
+    // Send personalized role reveals
+    room.players.forEach((player, playerId) => {
+        const isFox = playerId === room.foxId;
+        sendTo(room, playerId, {
+            type: 'GAME_STARTED',
+            phase: PHASES.ROLE_REVEAL,
+            isFox,
+            words: room.words,
+            secretWord: isFox ? null : room.secretWord,
+            players: getPlayersList(room),
+            topic: room.topic
+        });
+    });
+
+    return true;
+}
+
+// Move to hint writing phase
+function startHintPhase(room) {
+    room.phase = PHASES.HINT_WRITING;
+
+    // Tell everyone except fox to start writing hints
+    broadcast(room, {
+        type: 'PHASE_CHANGE',
+        phase: PHASES.HINT_WRITING,
+        players: getPlayersList(room),
+        peekPlayerName: null
+    }, room.foxId);
+
+    // Tell fox who they're peeking at (realtime hint watching)
+    const peekPlayerName = room.players.get(room.peekPlayerId)?.name;
+    sendTo(room, room.foxId, {
+        type: 'PHASE_CHANGE',
+        phase: PHASES.HINT_WRITING,
+        players: getPlayersList(room),
+        peekPlayerId: room.peekPlayerId,
+        peekPlayerName: peekPlayerName
+    });
+}
+
+// Handle realtime hint typing (sent to fox only)
+function handleHintTyping(room, playerId, hint) {
+    // Only send to fox if this is the player they're peeking at
+    if (playerId === room.peekPlayerId) {
+        sendTo(room, room.foxId, {
+            type: 'PEEK_HINT_UPDATE',
+            hint: hint || ''
+        });
+    }
+}
+
+// Submit a hint
+function submitHint(room, playerId, hint) {
+    room.hints.set(playerId, hint || '(no hint)');
+
+    // Broadcast progress
+    broadcast(room, {
+        type: 'HINT_SUBMITTED',
+        playerId,
+        hintsCount: room.hints.size,
+        totalPlayers: room.players.size,
+        players: getPlayersList(room)
+    });
+
+    // Check if all hints are in - go directly to hints reveal (no separate peek phase)
+    if (room.hints.size === room.players.size) {
+        revealHints(room);
+    }
+}
+
+// Fox peek phase removed - fox now sees hints in realtime during hint writing
+
+// Move to hints reveal
+function revealHints(room) {
+    room.phase = PHASES.HINTS_REVEAL;
+
+    const allHints = [];
+    room.players.forEach((player, playerId) => {
+        allHints.push({
+            playerId,
+            playerName: player.name,
+            hint: room.hints.get(playerId) || '(no hint)'
+        });
+    });
+
+    broadcast(room, {
+        type: 'HINTS_REVEALED',
+        phase: PHASES.HINTS_REVEAL,
+        hints: allHints
+    });
+}
+
+// Start voting phase
+function startVotingPhase(room) {
+    room.phase = PHASES.VOTING;
+    room.votes.clear();
+
+    broadcast(room, {
+        type: 'PHASE_CHANGE',
+        phase: PHASES.VOTING,
+        players: getPlayersList(room)
+    });
+}
+
+// Submit a vote
+function submitVote(room, voterId, targetId) {
+    room.votes.set(voterId, targetId);
+
+    broadcast(room, {
+        type: 'VOTE_SUBMITTED',
+        voterId,
+        votesCount: room.votes.size,
+        totalPlayers: room.players.size,
+        players: getPlayersList(room)
+    });
+
+    // Check if all votes are in
+    if (room.votes.size === room.players.size) {
+        processVotingResults(room);
+    }
+}
+
+// Process voting results
+function processVotingResults(room) {
+    const voteCounts = new Map();
+    room.votes.forEach((targetId) => {
+        voteCounts.set(targetId, (voteCounts.get(targetId) || 0) + 1);
+    });
+
+    const foxVotes = voteCounts.get(room.foxId) || 0;
+    const totalVoters = room.votes.size;
+    const foxCaught = foxVotes > totalVoters / 2;
+
+    // Find who voted for the fox
+    const finders = [];
+    room.votes.forEach((targetId, voterId) => {
+        if (targetId === room.foxId) {
+            finders.push(voterId);
+        }
+    });
+
+    if (foxCaught) {
+        // Fox was caught - give them a chance to escape
+        room.phase = PHASES.ESCAPE;
+
+        // Send escape phase to fox
+        sendTo(room, room.foxId, {
+            type: 'ESCAPE_PHASE',
+            phase: PHASES.ESCAPE,
+            words: room.words,
+            caught: true
+        });
+
+        // Tell others fox was caught
+        broadcast(room, {
+            type: 'FOX_CAUGHT',
+            phase: PHASES.ESCAPE,
+            foxName: room.players.get(room.foxId)?.name,
+            message: 'Fox was caught! Waiting for escape attempt...'
+        }, room.foxId);
+    } else {
+        // Fox wasn't caught
+        const scoreChanges = calculateScores(room, false, false, finders);
+        showResults(room, 'fox_wins', scoreChanges, finders);
+    }
+}
+
+// Fox attempts escape
+function attemptEscape(room, guess) {
+    room.escapeGuess = guess;
+    const escaped = guess === room.secretWord;
+
+    const finders = [];
+    room.votes.forEach((targetId, voterId) => {
+        if (targetId === room.foxId) {
+            finders.push(voterId);
+        }
+    });
+
+    const scoreChanges = calculateScores(room, true, escaped, finders);
+    const result = escaped ? 'fox_escapes' : 'fox_caught';
+    showResults(room, result, scoreChanges, finders);
+}
+
+// Calculate scores
+function calculateScores(room, foxCaught, foxEscaped, finders) {
+    const scoreChanges = new Map();
+
+    room.players.forEach((_, playerId) => {
+        scoreChanges.set(playerId, 0);
+    });
+
+    if (!foxCaught) {
+        // Fox not caught - fox gets 3 points
+        scoreChanges.set(room.foxId, 3);
+
+        // If exactly 1 person found the fox, they get 2 bonus points
+        if (finders.length === 1) {
+            scoreChanges.set(finders[0], 2);
+        }
+    } else if (foxEscaped) {
+        // Fox caught but escaped - fox gets 2 points
+        scoreChanges.set(room.foxId, 2);
+    } else {
+        // Fox caught and didn't escape - everyone else gets 1 point
+        room.players.forEach((_, playerId) => {
+            if (playerId !== room.foxId) {
+                scoreChanges.set(playerId, 1);
+            }
+        });
+    }
+
+    // Apply score changes
+    scoreChanges.forEach((change, playerId) => {
+        const current = room.scores.get(playerId) || 0;
+        room.scores.set(playerId, current + change);
+    });
+
+    return scoreChanges;
+}
+
+// Show results
+function showResults(room, result, scoreChanges, finders) {
+    room.phase = PHASES.RESULTS;
+
+    const scores = [];
+    room.players.forEach((player, playerId) => {
+        scores.push({
+            playerId,
+            playerName: player.name,
+            score: room.scores.get(playerId) || 0,
+            change: scoreChanges.get(playerId) || 0,
+            isFox: playerId === room.foxId
+        });
+    });
+
+    scores.sort((a, b) => b.score - a.score);
+
+    broadcast(room, {
+        type: 'GAME_OVER',
+        phase: PHASES.RESULTS,
+        result,
+        foxId: room.foxId,
+        foxName: room.players.get(room.foxId)?.name,
+        secretWord: room.secretWord,
+        escapeGuess: room.escapeGuess,
+        finders: finders.map(id => room.players.get(id)?.name),
+        scores,
+        players: getPlayersList(room)
+    });
+}
+
+// Return to lobby
+function returnToLobby(room) {
+    room.phase = PHASES.LOBBY;
+    room.hints.clear();
+    room.votes.clear();
+    room.foxId = null;
+    room.secretWord = null;
+    room.escapeGuess = null;
+
+    broadcast(room, {
+        type: 'RETURN_TO_LOBBY',
+        phase: PHASES.LOBBY,
+        players: getPlayersList(room)
+    });
+}
+
+// Handle player disconnect
+function handleDisconnect(room, playerId) {
+    const player = room.players.get(playerId);
+    if (player) {
+        player.connected = false;
+        player.ws = null;
+
+        broadcast(room, {
+            type: 'PLAYER_DISCONNECTED',
+            playerId,
+            playerName: player.name,
+            players: getPlayersList(room)
+        });
+
+        // If in lobby and no connected players, clean up room after delay
+        const connectedCount = Array.from(room.players.values()).filter(p => p.connected).length;
+        if (connectedCount === 0) {
+            setTimeout(() => {
+                const currentRoom = rooms.get(room.code);
+                if (currentRoom) {
+                    const stillConnected = Array.from(currentRoom.players.values()).filter(p => p.connected).length;
+                    if (stillConnected === 0) {
+                        rooms.delete(room.code);
+                        console.log(`Room ${room.code} deleted (all players left)`);
+                    }
+                }
+            }, 60000); // 1 minute cleanup delay
+        }
+    }
+}
+
+// Create HTTP server for serving static files
+const httpServer = http.createServer((req, res) => {
+    let filePath = req.url === '/' ? '/index.html' : req.url;
+    filePath = path.join(__dirname, filePath);
+
+    const ext = path.extname(filePath);
+    const contentTypes = {
+        '.html': 'text/html',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.json': 'application/json'
+    };
+
+    fs.readFile(filePath, (err, data) => {
+        if (err) {
+            res.writeHead(404);
+            res.end('Not found');
+            return;
+        }
+        res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
+        res.end(data);
+    });
+});
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server: httpServer });
+
+wss.on('connection', (ws) => {
+    let playerId = null;
+    let roomCode = null;
+
+    console.log('New connection');
+
+    ws.on('message', (data) => {
+        let message;
+        try {
+            message = JSON.parse(data);
+        } catch (e) {
+            console.error('Invalid message:', data);
+            return;
+        }
+
+        console.log('Received:', message.type);
+
+        switch (message.type) {
+            case 'CREATE_ROOM': {
+                playerId = generatePlayerId();
+                const room = createRoom(playerId, message.playerName);
+                roomCode = room.code;
+
+                const player = room.players.get(playerId);
+                player.ws = ws;
+
+                ws.send(JSON.stringify({
+                    type: 'ROOM_CREATED',
+                    roomCode: room.code,
+                    playerId,
+                    players: getPlayersList(room)
+                }));
+
+                console.log(`Room ${room.code} created by ${message.playerName}`);
+                break;
+            }
+
+            case 'JOIN_ROOM': {
+                const room = getRoom(message.roomCode);
+
+                if (!room) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Room not found'
+                    }));
+                    return;
+                }
+
+                if (room.phase !== PHASES.LOBBY) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Game already in progress'
+                    }));
+                    return;
+                }
+
+                if (room.players.size >= 8) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Room is full'
+                    }));
+                    return;
+                }
+
+                // Check for duplicate name
+                const existingNames = Array.from(room.players.values()).map(p => p.name.toLowerCase());
+                if (existingNames.includes(message.playerName.toLowerCase())) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Name already taken'
+                    }));
+                    return;
+                }
+
+                playerId = generatePlayerId();
+                roomCode = room.code;
+
+                room.players.set(playerId, {
+                    id: playerId,
+                    name: message.playerName,
+                    connected: true,
+                    ws
+                });
+                room.scores.set(playerId, 0);
+
+                ws.send(JSON.stringify({
+                    type: 'ROOM_JOINED',
+                    roomCode: room.code,
+                    playerId,
+                    hostId: room.hostId,
+                    players: getPlayersList(room)
+                }));
+
+                broadcast(room, {
+                    type: 'PLAYER_JOINED',
+                    playerId,
+                    playerName: message.playerName,
+                    players: getPlayersList(room)
+                }, playerId);
+
+                console.log(`${message.playerName} joined room ${room.code}`);
+                break;
+            }
+
+            case 'START_GAME': {
+                const room = getRoom(roomCode);
+                if (!room || playerId !== room.hostId) return;
+
+                if (room.players.size < 3) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Need at least 3 players'
+                    }));
+                    return;
+                }
+
+                startGame(room, message.topic);
+                console.log(`Game started in room ${roomCode} with topic ${message.topic}`);
+                break;
+            }
+
+            case 'READY_FOR_HINTS': {
+                const room = getRoom(roomCode);
+                if (!room) return;
+
+                // When all players confirm they've seen their role, start hint phase
+                // For simplicity, host triggers this
+                if (playerId === room.hostId && room.phase === PHASES.ROLE_REVEAL) {
+                    startHintPhase(room);
+                }
+                break;
+            }
+
+            case 'HINT_TYPING': {
+                const room = getRoom(roomCode);
+                if (!room || room.phase !== PHASES.HINT_WRITING) return;
+
+                handleHintTyping(room, playerId, message.hint);
+                break;
+            }
+
+            case 'SUBMIT_HINT': {
+                const room = getRoom(roomCode);
+                if (!room || room.phase !== PHASES.HINT_WRITING) return;
+
+                submitHint(room, playerId, message.hint);
+                console.log(`${room.players.get(playerId)?.name} submitted hint`);
+                break;
+            }
+
+            case 'START_VOTING': {
+                const room = getRoom(roomCode);
+                if (!room) return;
+
+                if (playerId === room.hostId && room.phase === PHASES.HINTS_REVEAL) {
+                    startVotingPhase(room);
+                }
+                break;
+            }
+
+            case 'SUBMIT_VOTE': {
+                const room = getRoom(roomCode);
+                if (!room || room.phase !== PHASES.VOTING) return;
+
+                submitVote(room, playerId, message.targetId);
+                console.log(`${room.players.get(playerId)?.name} voted`);
+                break;
+            }
+
+            case 'ESCAPE_GUESS': {
+                const room = getRoom(roomCode);
+                if (!room || playerId !== room.foxId || room.phase !== PHASES.ESCAPE) return;
+
+                attemptEscape(room, message.word);
+                console.log(`Fox guessed: ${message.word}`);
+                break;
+            }
+
+            case 'PLAY_AGAIN': {
+                const room = getRoom(roomCode);
+                if (!room || playerId !== room.hostId) return;
+
+                returnToLobby(room);
+                break;
+            }
+
+            case 'PING': {
+                ws.send(JSON.stringify({ type: 'PONG' }));
+                break;
+            }
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('Connection closed');
+        if (roomCode && playerId) {
+            const room = getRoom(roomCode);
+            if (room) {
+                handleDisconnect(room, playerId);
+            }
+        }
+    });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
+});
+
+const PORT = process.env.PORT || 3001;
+httpServer.listen(PORT, () => {
+    console.log(`\n🦊 Fox Game Server running!`);
+    console.log(`   HTTP:      http://localhost:${PORT}`);
+    console.log(`   WebSocket: ws://localhost:${PORT}`);
+    console.log(`\n   Open http://localhost:${PORT} in your browser to play!\n`);
+});

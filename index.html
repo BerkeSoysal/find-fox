@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fox Game 🦊 - Online Multiplayer</title>
+  <meta name="description"
+    content="A real-time online social deduction party game where one player is the Fox who doesn't know the secret word.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Connection Status -->
+    <div id="connection-status" class="connection-status">
+      <span class="status-dot"></span>
+      <span class="status-text">Connecting...</span>
+    </div>
+
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="screen active">
+      <div class="glass-card welcome-content">
+        <div class="logo">🦊</div>
+        <h1>Fox Game</h1>
+        <p class="tagline">Find the imposter who doesn't know the word!</p>
+        <p class="online-badge">🌐 Online Multiplayer</p>
+
+        <div class="welcome-buttons">
+          <button class="btn btn-primary btn-large btn-block" onclick="App.showCreateRoom()">
+            Create Game
+          </button>
+          <button class="btn btn-secondary btn-large btn-block" onclick="App.showJoinRoom()">
+            Join Game
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Room Screen -->
+    <div id="create-room-screen" class="screen">
+      <div class="glass-card">
+        <h2 class="mb-lg">🎮 Create Game</h2>
+        <p class="text-muted mb-lg">Enter your name to host a game</p>
+
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <input type="text" id="host-name-input" class="form-input" placeholder="Enter your name..." maxlength="20"
+            onkeypress="if(event.key==='Enter') App.createRoom()">
+        </div>
+
+        <button class="btn btn-primary btn-block" onclick="App.createRoom()">
+          Create Room
+        </button>
+
+        <button class="btn btn-secondary btn-block mt-lg" onclick="App.showWelcome()">
+          ← Back
+        </button>
+      </div>
+    </div>
+
+    <!-- Join Room Screen -->
+    <div id="join-room-screen" class="screen">
+      <div class="glass-card">
+        <h2 class="mb-lg">🔗 Join Game</h2>
+        <p class="text-muted mb-lg">Enter the room code and your name</p>
+
+        <div class="form-group">
+          <label class="form-label">Room Code</label>
+          <input type="text" id="room-code-input" class="form-input room-code-input" placeholder="XXXX" maxlength="4"
+            oninput="this.value = this.value.toUpperCase()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <input type="text" id="join-name-input" class="form-input" placeholder="Enter your name..." maxlength="20"
+            onkeypress="if(event.key==='Enter') App.joinRoom()">
+        </div>
+
+        <button class="btn btn-primary btn-block" onclick="App.joinRoom()">
+          Join Room
+        </button>
+
+        <button class="btn btn-secondary btn-block mt-lg" onclick="App.showWelcome()">
+          ← Back
+        </button>
+      </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-screen" class="screen">
+      <div class="glass-card">
+        <div class="room-code-display">
+          <p class="text-muted">Room Code</p>
+          <h1 id="lobby-room-code" class="room-code" onclick="App.copyRoomCode()">----</h1>
+          <p class="copy-hint">Tap to copy</p>
+        </div>
+
+        <h3 class="mb-md">👥 Players</h3>
+        <div id="lobby-players" class="lobby-players"></div>
+
+        <p id="lobby-status" class="text-muted text-center mt-lg">Waiting for players...</p>
+
+        <!-- Host controls -->
+        <div id="host-controls" class="mt-xl" style="display: none;">
+          <h3 class="mb-md">📚 Choose Topic</h3>
+          <div id="lobby-topic-grid" class="topic-grid"></div>
+
+          <button id="lobby-start-btn" class="btn btn-primary btn-block mt-lg" onclick="App.startGameFromLobby()"
+            disabled>
+            Start Game (3+ players needed)
+          </button>
+        </div>
+
+        <!-- Non-host message -->
+        <div id="guest-message" class="mt-xl text-center" style="display: none;">
+          <p class="text-muted">Waiting for host to start the game...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Role Reveal Screen -->
+    <div id="role-screen" class="screen">
+      <div class="glass-card role-reveal" id="role-content">
+        <!-- Dynamic content -->
+      </div>
+    </div>
+
+    <!-- Word Reveal Screen (for non-fox players, now private) -->
+    <div id="word-screen" class="screen">
+      <div class="glass-card">
+        <div class="current-player-hint">
+          <p class="text-muted">The secret word is:</p>
+          <h1 id="secret-word-display" class="secret-word-highlight mt-lg mb-lg"></h1>
+        </div>
+
+        <div class="word-grid" id="word-grid-display"></div>
+
+        <button class="btn btn-primary btn-block" onclick="App.confirmRole()">
+          Got it! 👍
+        </button>
+      </div>
+    </div>
+
+    <!-- Hint Writing Screen (Simultaneous) - With Word Grid Always Visible -->
+    <div id="hint-screen" class="screen">
+      <div class="glass-card">
+        <!-- Progress bar -->
+        <div id="hint-progress-container" class="progress-container mb-lg">
+          <div class="progress-text">
+            <span id="hint-count">0</span> / <span id="hint-total">0</span> hints submitted
+          </div>
+          <div class="progress-bar">
+            <div id="hint-progress-bar" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- Word Grid - Always visible -->
+        <div class="word-grid-section">
+          <p class="text-muted text-center mb-sm">Word Grid</p>
+          <div class="word-grid word-grid-compact" id="hint-word-grid"></div>
+        </div>
+
+        <!-- Fox realtime peek section (only shown to fox) -->
+        <div id="fox-peek-section" class="fox-peek-live" style="display: none;">
+          <div class="peek-header">
+            <span class="fox-badge">🦊 Live Peek</span>
+            <span id="peek-player-name" class="peek-player"></span>
+          </div>
+          <div id="live-peek-hint" class="peek-hint-live">
+            <span class="typing-indicator">waiting for them to type...</span>
+          </div>
+        </div>
+
+        <!-- Submitted message -->
+        <div id="hint-submitted-message" class="submitted-message" style="display: none;">
+          <div class="check-icon">✓</div>
+          <h2>Hint Submitted!</h2>
+          <p class="text-muted">Waiting for other players...</p>
+          <div id="hint-waiting-players" class="waiting-players"></div>
+        </div>
+
+        <!-- Hint input area -->
+        <div id="hint-input-area">
+          <div class="current-player-hint">
+            <p id="your-word-reminder" class="word-reminder"></p>
+          </div>
+
+          <div class="hint-input-area">
+            <textarea id="hint-input" class="form-input" placeholder="Write a subtle hint..." maxlength="100"
+              oninput="App.onHintTyping(this.value)"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-block" onclick="App.submitHint()">
+            Submit Hint ✓
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hints Reveal Screen - With Word Grid -->
+    <div id="reveal-screen" class="screen">
+      <div class="glass-card">
+        <h2 class="text-center mb-lg">📝 All Hints</h2>
+
+        <!-- Word Grid - Always visible -->
+        <div class="word-grid-section">
+          <p class="text-muted text-center mb-sm">Word Grid</p>
+          <div class="word-grid word-grid-compact" id="reveal-word-grid"></div>
+        </div>
+
+        <div id="all-hints" class="hints-list"></div>
+
+        <div id="reveal-host-controls" style="display: none;">
+          <button class="btn btn-primary btn-block mt-lg" onclick="App.startVoting()">
+            Start Voting 🗳️
+          </button>
+        </div>
+
+        <div id="reveal-guest-message" class="text-center mt-lg" style="display: none;">
+          <p class="text-muted">Waiting for host to start voting...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voting Screen (Simultaneous) - With Word Grid -->
+    <div id="voting-screen" class="screen">
+      <div class="glass-card">
+        <div class="progress-container mb-lg">
+          <div class="progress-text">
+            <span id="vote-count">0</span> / <span id="vote-total">0</span> votes cast
+          </div>
+          <div class="progress-bar">
+            <div id="vote-progress-bar" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- Word Grid - Always visible -->
+        <div class="word-grid-section">
+          <p class="text-muted text-center mb-sm">Word Grid</p>
+          <div class="word-grid word-grid-compact" id="vote-word-grid"></div>
+        </div>
+
+        <div id="vote-submitted-message" class="submitted-message" style="display: none;">
+          <div class="check-icon">✓</div>
+          <h2>Vote Submitted!</h2>
+          <p class="text-muted">Waiting for other players...</p>
+          <div id="vote-waiting-players" class="waiting-players"></div>
+        </div>
+
+        <div id="vote-input-area">
+          <div class="current-player-hint">
+            <p class="text-muted">Who is the Fox?</p>
+          </div>
+
+          <div id="vote-options" class="vote-options"></div>
+
+          <button id="submit-vote-btn" class="btn btn-primary btn-block mt-lg" onclick="App.submitVote()" disabled>
+            Confirm Vote
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Escape Screen (Fox only) - With Word Grid for guessing -->
+    <div id="escape-screen" class="screen">
+      <div class="glass-card escape-content">
+        <div class="role-icon">🦊</div>
+        <h2 class="escape-title">You've been caught!</h2>
+        <p class="text-muted mb-lg">Guess the secret word to escape:</p>
+
+        <div id="escape-word-grid" class="word-grid"></div>
+
+        <button id="escape-btn" class="btn btn-primary btn-block mt-lg" onclick="App.attemptEscape()" disabled>
+          Make Your Guess
+        </button>
+      </div>
+    </div>
+
+    <!-- Waiting for Escape Screen (non-fox players) - With Word Grid -->
+    <div id="waiting-escape-screen" class="screen">
+      <div class="glass-card text-center">
+        <div class="waiting-animation">
+          <div class="fox-icon-animated">🦊</div>
+        </div>
+        <h2 id="caught-fox-name">The Fox was caught!</h2>
+        <p class="text-muted mb-lg">Waiting for escape attempt...</p>
+
+        <!-- Word Grid - Always visible -->
+        <div class="word-grid-section">
+          <p class="text-muted text-center mb-sm">Word Grid</p>
+          <div class="word-grid word-grid-compact" id="waiting-escape-word-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Screen - With Word Grid -->
+    <div id="results-screen" class="screen">
+      <div class="glass-card results-content">
+        <div id="result-icon" class="result-icon"></div>
+        <h1 id="result-title" class="result-title"></h1>
+        <p id="result-message" class="text-muted mb-lg"></p>
+
+        <div id="result-details" class="mb-lg"></div>
+
+        <!-- Word Grid - Show what the word was -->
+        <div class="word-grid-section">
+          <p class="text-muted text-center mb-sm">Word Grid</p>
+          <div class="word-grid word-grid-compact" id="results-word-grid"></div>
+        </div>
+
+        <h3 class="mb-md mt-lg">🏆 Scoreboard</h3>
+        <div id="scoreboard" class="scoreboard"></div>
+
+        <div id="results-host-controls" class="mt-xl" style="display: none;">
+          <button class="btn btn-primary btn-block mb-md" onclick="App.playAgain()">
+            Play Again
+          </button>
+        </div>
+
+        <div id="results-guest-message" class="mt-xl text-center" style="display: none;">
+          <p class="text-muted">Waiting for host to start next round...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="error-toast" class="error-toast">
+      <span id="error-message"></span>
+    </div>
+  </div>
+
+  <script src="js/words.js"></script>
+  <script src="js/socket.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "fox-game-online",
+  "version": "1.0.0",
+  "description": "Fox Game - Real-time online multiplayer social deduction game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["game", "multiplayer", "websocket", "social-deduction"],
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
