@@ -122,32 +122,12 @@
       </div>
     </div>
 
-    <!-- Role Reveal Screen -->
-    <div id="role-screen" class="screen">
-      <div class="glass-card role-reveal" id="role-content">
-        <!-- Dynamic content -->
-      </div>
-    </div>
-
-    <!-- Word Reveal Screen (for non-fox players, now private) -->
-    <div id="word-screen" class="screen">
-      <div class="glass-card">
-        <div class="current-player-hint">
-          <p class="text-muted">The secret word is:</p>
-          <h1 id="secret-word-display" class="secret-word-highlight mt-lg mb-lg"></h1>
-        </div>
-
-        <div class="word-grid" id="word-grid-display"></div>
-
-        <button class="btn btn-primary btn-block" onclick="App.confirmRole()">
-          Got it! 👍
-        </button>
-      </div>
-    </div>
-
     <!-- Hint Writing Screen (Simultaneous) - With Word Grid Always Visible -->
     <div id="hint-screen" class="screen">
       <div class="glass-card">
+        <!-- Standings -->
+        <div id="hint-standings"></div>
+
         <!-- Phase timer -->
         <div id="hint-timer" class="timer-container mb-lg">
           <div class="timer-header">

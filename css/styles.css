@@ -583,6 +583,39 @@ textarea.form-input {
     color: var(--fox-orange);
 }
 
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--bg-card);
+    border-radius: var(--radius-full);
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--fox-orange);
+    border: 1px solid var(--fox-orange);
+}
+
+.role-icon-small {
+    font-size: 1.25rem;
+}
+
+.role-instruction {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.secret-word-highlight {
+    color: var(--fox-orange);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: var(--space-md) 0;
+    padding: var(--space-md);
+    background: rgba(255, 107, 53, 0.1);
+    border-radius: var(--radius-md);
+}
+
 /* ===== Progress Container ===== */
 .progress-container {
     text-align: center;

@@ -418,7 +418,13 @@ const App = {
         this.hasSubmittedHint = false;
         this.hasSubmittedVote = false;
 
-        this.showRoleReveal();
+        // Store peek info if fox
+        if (data.peekPlayerId) {
+            this.peekPlayerId = data.peekPlayerId;
+            this.peekPlayerName = data.peekPlayerName;
+        }
+
+        this.showHintInput();
     },
 
     /**
@@ -438,71 +444,16 @@ const App = {
     },
 
     /**
-     * Show role reveal
+     * Clear game state
      */
-    showRoleReveal() {
-        const content = document.getElementById('role-content');
-
-        content.className = `role-reveal ${this.isFox ? 'role-fox' : ''}`;
-        content.innerHTML = `
-      <div class="role-icon">${this.isFox ? '🦊' : '👤'}</div>
-      <h2 class="role-title">Your Role</h2>
-      <p class="text-muted mb-lg">${this.isFox
-                ? "You are the FOX! You don't know the word. Try to blend in!"
-                : "You are NOT the fox. You'll see the word next."}</p>
-                
-      <div class="standings-mini mb-xl">
-        <p class="standings-title">Current Standings</p>
-        <div class="standings-list">
-          ${this.players.sort((a, b) => b.score - a.score).map(p => `
-            <div class="standing-item">
-              <span>${p.name}</span>
-              <span class="standing-score">${p.score || 0} pts</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <button class="btn btn-primary btn-block" onclick="App.proceedFromRole()">
-        ${this.isFox ? "I understand 🦊" : "Show me the word"}
-      </button>
-    `;
-
-        this.showScreen('role-screen');
-    },
-
-    /**
-     * Proceed from role reveal
-     */
-    proceedFromRole() {
-        if (this.isFox) {
-            // Fox goes directly to waiting/hint phase
-            this.confirmRole();
-        } else {
-            // Show word to non-fox
-            this.showWordReveal();
-        }
-    },
-
-    /**
-     * Show word reveal
-     */
-    showWordReveal() {
-        document.getElementById('secret-word-display').textContent = this.secretWord;
-        this.renderWordGrid('word-grid-display', true);
-        this.showScreen('word-screen');
-    },
-
-    /**
-     * Confirm role (ready for hints)
-     */
-    confirmRole() {
-        // For host, trigger hint phase; for others, wait
-        if (Socket.isHost) {
-            Socket.readyForHints();
-        }
-        // Show hint screen immediately
-        this.showHintInput();
+    clearGameState() {
+        this.isFox = false;
+        this.words = [];
+        this.secretWord = null;
+        this.peekPlayerId = null;
+        this.peekPlayerName = null;
+        this.hasSubmittedHint = false;
+        this.hasSubmittedVote = false;
     },
 
     /**
@@ -541,12 +492,34 @@ const App = {
         // Render word grid (always visible)
         this.renderWordGrid('hint-word-grid', !this.isFox);
 
-        // Show word reminder for non-fox, or fox peek section for fox
+        // Show role reminder for non-fox, or fox peek section for fox
         const reminder = document.getElementById('your-word-reminder');
         const foxPeekSection = document.getElementById('fox-peek-section');
+        const hintStandings = document.getElementById('hint-standings');
+
+        // Render mini standings
+        if (hintStandings) {
+            hintStandings.innerHTML = `
+                <div class="standings-mini mb-md">
+                    <p class="standings-title">Current Standings</p>
+                    <div class="standings-list">
+                        ${this.players.sort((a, b) => b.score - a.score).map(p => `
+                            <div class="standing-item">
+                                <span>${p.name}</span>
+                                <span class="standing-score">${p.score || 0} pts</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
 
         if (this.isFox) {
-            reminder.innerHTML = '<span class="fox-warning">🦊 You don\'t know the word - fake it!</span>';
+            reminder.innerHTML = `
+                <div class="role-badge mb-sm"><span class="role-icon-small">🦊</span> You are the FOX!</div>
+                <div class="role-instruction mb-sm">You don't know the word. Try to blend in!</div>
+                <span class="fox-warning">Fake it till you make it!</span>
+            `;
 
             // Show realtime peek section for fox
             if (foxPeekSection && this.peekPlayerName) {
@@ -556,7 +529,11 @@ const App = {
                     '<span class="typing-indicator">waiting for them to type...</span>';
             }
         } else {
-            reminder.innerHTML = `The word is: <strong>${this.secretWord}</strong>`;
+            reminder.innerHTML = `
+                <div class="role-badge mb-sm"><span class="role-icon-small">👤</span> You are a HUMAN</div>
+                <div class="role-instruction mb-sm">Help the others find the fox!</div>
+                <div class="secret-word-highlight">The word is: <strong>${this.secretWord}</strong></div>
+            `;
             if (foxPeekSection) foxPeekSection.style.display = 'none';
         }
 

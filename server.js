@@ -186,19 +186,24 @@ function startGame(room, topic) {
     const nonFoxIds = playerIds.filter(id => id !== room.foxId);
     room.peekPlayerId = nonFoxIds[Math.floor(Math.random() * nonFoxIds.length)];
 
-    room.phase = PHASES.ROLE_REVEAL;
+    room.phase = PHASES.HINT_WRITING;
 
-    // Send personalized role reveals
+    // Send personalized role reveals and transition directly to hints
     room.players.forEach((player, playerId) => {
         const isFox = playerId === room.foxId;
+        const peekPlayerName = isFox ? room.players.get(room.peekPlayerId)?.name : null;
+        const peekPlayerId = isFox ? room.peekPlayerId : null;
+
         sendTo(room, playerId, {
             type: 'GAME_STARTED',
-            phase: PHASES.ROLE_REVEAL,
+            phase: PHASES.HINT_WRITING,
             isFox,
             words: room.words,
             secretWord: isFox ? null : room.secretWord,
             players: getPlayersList(room),
-            topic: room.topic
+            topic: room.topic,
+            peekPlayerId,
+            peekPlayerName
         });
     });
 
