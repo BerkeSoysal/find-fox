@@ -351,11 +351,21 @@ const App = {
     updateLobbyPlayers(players) {
         this.players = players;
         const container = document.getElementById('lobby-players');
+        if (!container) return;
+
+        // BUG FIX: If we are currently typing in the name input, do NOT re-render the lobby list
+        // because it will wipe the input field and cause focus loss (especially for the '4th player').
+        const activeInput = document.activeElement;
+        if (activeInput && activeInput.classList.contains('player-name-input')) {
+            // Only update the data model, skip the UI update for now. 
+            // The UI will catch up when the user blurs the input.
+            return;
+        }
 
         container.innerHTML = players.map(p => {
             const isMe = p.id === Socket.playerId;
             return `
-                <div class="lobby-player ${p.connected ? '' : 'disconnected'} ${isMe ? 'is-me' : ''}">
+                <div class="lobby-player ${p.connected ? '' : 'disconnected'} ${isMe ? 'is-me' : ''}" data-player-id="${p.id}">
                     <span class="player-status-dot ${p.connected ? 'online' : 'offline'}"></span>
                     <div class="player-info">
                         ${isMe
@@ -522,8 +532,8 @@ const App = {
         // This is a simplified update
         const scoreboard = document.getElementById('scoreboard');
         if (scoreboard) {
-            // We just need to update the names in the scoreboard items
-            const items = scoreboard.querySelectorAll('.scoreboard-item');
+            // Fix: selector was .scoreboard-item, should be .score-row
+            const items = scoreboard.querySelectorAll('.score-row');
             items.forEach(item => {
                 const pid = item.dataset.playerId;
                 const p = players.find(player => player.id === pid);
