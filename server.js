@@ -98,7 +98,7 @@ function generatePlayerId() {
 }
 
 // Create a new room
-function createRoom(hostId, hostName) {
+function createRoom(hostId, hostName, isPublic = false, maxPlayers = 6) {
     const code = generateRoomCode();
     const room = {
         code,
@@ -115,7 +115,9 @@ function createRoom(hostId, hostName) {
         peekPlayerId: null,
         escapeGuess: null,
         roundNumber: 0,
-        timerDuration: 15 // Default 15 seconds
+        timerDuration: 15, // Default 15 seconds
+        isPublic,
+        maxPlayers: Math.min(Math.max(parseInt(maxPlayers) || 6, 3), 6)
     };
 
     room.players.set(hostId, {
@@ -172,8 +174,25 @@ function getRoomData(room) {
         roomCode: room.code,
         hostId: room.hostId,
         players: getPlayersList(room),
-        timerDuration: room.timerDuration
+        timerDuration: room.timerDuration,
+        isPublic: room.isPublic,
+        maxPlayers: room.maxPlayers
     };
+}
+
+// Get all public lobby rooms
+function getPublicRooms() {
+    const list = [];
+    rooms.forEach(room => {
+        if (room.isPublic && room.phase === PHASES.LOBBY) {
+            list.push({
+                roomCode: room.code,
+                playerCount: room.players.size,
+                maxPlayers: room.maxPlayers
+            });
+        }
+    });
+    return list;
 }
 
 // Start a new game round
@@ -563,7 +582,7 @@ wss.on('connection', (ws) => {
         switch (message.type) {
             case 'CREATE_ROOM': {
                 playerId = generatePlayerId();
-                const room = createRoom(playerId, message.playerName);
+                const room = createRoom(playerId, message.playerName, message.isPublic, message.maxPlayers);
                 roomCode = room.code;
 
                 const player = room.players.get(playerId);
@@ -574,10 +593,20 @@ wss.on('connection', (ws) => {
                     roomCode: room.code,
                     playerId,
                     players: getPlayersList(room),
-                    timerDuration: room.timerDuration
+                    timerDuration: room.timerDuration,
+                    isPublic: room.isPublic,
+                    maxPlayers: room.maxPlayers
                 }));
 
-                console.log(`Room ${room.code} created by ${message.playerName}`);
+                console.log(`Room ${room.code} created by ${message.playerName} (Public: ${room.isPublic}, Max: ${room.maxPlayers})`);
+                break;
+            }
+
+            case 'GET_PUBLIC_ROOMS': {
+                ws.send(JSON.stringify({
+                    type: 'PUBLIC_ROOMS_LIST',
+                    rooms: getPublicRooms()
+                }));
                 break;
             }
 
@@ -614,7 +643,7 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
-                if (room.players.size >= 8) {
+                if (room.players.size >= room.maxPlayers) {
                     ws.send(JSON.stringify({
                         type: 'ERROR',
                         message: 'Room is full'

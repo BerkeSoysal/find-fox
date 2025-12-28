@@ -194,6 +194,10 @@ const App = {
         Socket.onReturnToLobby = (data) => {
             this.returnToLobby(data);
         };
+
+        Socket.onPublicRoomsList = (rooms) => {
+            this.renderPublicRooms(rooms);
+        };
     },
 
     /**
@@ -249,6 +253,7 @@ const App = {
             window.history.pushState({}, '', '/');
         }
         this.showScreen('welcome-screen');
+        Socket.getPublicRooms();
     },
 
     /**
@@ -272,11 +277,14 @@ const App = {
      */
     createRoom() {
         const name = document.getElementById('host-name-input').value.trim();
+        const isPublic = document.getElementById('room-public-toggle').checked;
+        const maxPlayers = parseInt(document.getElementById('max-players-range').value);
+
         if (!name) {
             this.showError('Please enter your name');
             return;
         }
-        Socket.createRoom(name);
+        Socket.createRoom(name, isPublic, maxPlayers);
     },
 
     /**
@@ -444,6 +452,38 @@ const App = {
         if (display) {
             display.textContent = this.timerDuration === 0 ? 'No Timer' : `${this.timerDuration}s`;
         }
+    },
+
+    /**
+     * Render public rooms list
+     */
+    renderPublicRooms(rooms) {
+        const list = document.getElementById('public-rooms-list');
+        if (!list) return;
+
+        if (!rooms || rooms.length === 0) {
+            list.innerHTML = '<p class="text-muted text-center py-md">No public rooms found</p>';
+            return;
+        }
+
+        list.innerHTML = rooms.map(room => `
+            <div class="public-room-item" onclick="App.joinPublicRoom('${room.roomCode}')">
+                <div class="room-info">
+                    <span class="room-code-tag">${room.roomCode}</span>
+                    <span class="player-count-tag">Lobby • ${room.playerCount}/${room.maxPlayers} players</span>
+                </div>
+                <button class="btn btn-secondary btn-small">Join →</button>
+            </div>
+        `).join('');
+    },
+
+    /**
+     * Join room from public list
+     */
+    joinPublicRoom(code) {
+        const codeInput = document.getElementById('room-code-input');
+        if (codeInput) codeInput.value = code;
+        this.showJoinRoom();
     },
 
     /**

@@ -37,6 +37,17 @@
             Join Game
           </button>
         </div>
+
+        <!-- Public Rooms Section -->
+        <div id="public-rooms-section" class="mt-xl">
+          <div class="section-header mb-md">
+            <h3 class="mb-0">🌐 Public Rooms</h3>
+            <button class="btn btn-text btn-small" onclick="Socket.getPublicRooms()">Refresh ⟳</button>
+          </div>
+          <div id="public-rooms-list" class="public-rooms-list">
+            <p class="text-muted text-center py-md">Searching for public rooms...</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -50,6 +61,24 @@
           <label class="form-label">Your Name</label>
           <input type="text" id="host-name-input" class="form-input" placeholder="Enter your name..." maxlength="20"
             onkeypress="if(event.key==='Enter') App.createRoom()">
+        </div>
+
+        <div class="form-row mb-lg">
+          <div class="form-group flex-1 mr-md">
+            <label class="form-label">Privacy</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="room-public-toggle" class="toggle-input">
+              <label for="room-public-toggle" class="toggle-label">
+                <span class="toggle-text private">Private 🔒</span>
+                <span class="toggle-text public">Public 🌐</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Max Players: <span id="max-players-value">6</span></label>
+            <input type="range" id="max-players-range" class="form-range" min="3" max="6" value="6"
+              oninput="document.getElementById('max-players-value').textContent = this.value">
+          </div>
         </div>
 
         <button class="btn btn-primary btn-block" onclick="App.createRoom()">

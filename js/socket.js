@@ -32,6 +32,7 @@ const Socket = {
     onEscapePhase: null,
     onGameOver: null,
     onReturnToLobby: null,
+    onPublicRoomsList: null,
 
     /**
      * Connect to WebSocket server
@@ -154,6 +155,10 @@ const Socket = {
                 if (this.onReturnToLobby) this.onReturnToLobby(message);
                 break;
 
+            case 'PUBLIC_ROOMS_LIST':
+                if (this.onPublicRoomsList) this.onPublicRoomsList(message.rooms);
+                break;
+
             case 'ERROR':
                 console.error('Server error:', message.message);
                 if (this.onError) this.onError(new Error(message.message));
@@ -177,10 +182,21 @@ const Socket = {
     /**
      * Create a new room
      */
-    createRoom(playerName) {
+    createRoom(playerName, isPublic = false, maxPlayers = 6) {
         this.send({
             type: 'CREATE_ROOM',
-            playerName
+            playerName,
+            isPublic,
+            maxPlayers
+        });
+    },
+
+    /**
+     * Request public rooms list
+     */
+    getPublicRooms() {
+        this.send({
+            type: 'GET_PUBLIC_ROOMS'
         });
     },
 
