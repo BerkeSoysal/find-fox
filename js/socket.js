@@ -25,6 +25,7 @@ const Socket = {
     onPhaseChange: null,
     onHintSubmitted: null,
     onPeekHintUpdate: null,
+    onTimerUpdated: null,
     onHintsRevealed: null,
     onVoteSubmitted: null,
     onFoxCaught: null,
@@ -125,6 +126,10 @@ const Socket = {
                 if (this.onPeekHintUpdate) this.onPeekHintUpdate(message);
                 break;
 
+            case 'TIMER_UPDATED':
+                if (this.onTimerUpdated) this.onTimerUpdated(message);
+                break;
+
             case 'HINTS_REVEALED':
                 if (this.onHintsRevealed) this.onHintsRevealed(message);
                 break;
@@ -176,6 +181,16 @@ const Socket = {
         this.send({
             type: 'CREATE_ROOM',
             playerName
+        });
+    },
+
+    /**
+     * Set timer duration (host only)
+     */
+    setTimerDuration(duration) {
+        this.send({
+            type: 'SET_TIMER',
+            duration
         });
     },
 

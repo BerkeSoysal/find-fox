@@ -6,6 +6,7 @@ const App = {
     // Local state
     players: [],
     isFox: false,
+    timerDuration: 15,
     secretWord: null,
     words: [],
     hints: [],
@@ -167,6 +168,11 @@ const App = {
             this.updatePeekHint(data);
         };
 
+        Socket.onTimerUpdated = (data) => {
+            this.timerDuration = data.duration;
+            this.updateTimerUI();
+        };
+
 
 
         Socket.onVoteSubmitted = (data) => {
@@ -297,8 +303,10 @@ const App = {
      */
     showLobby(data) {
         document.getElementById('lobby-room-code').textContent = data.roomCode;
+        this.timerDuration = data.timerDuration || 15;
         this.updateLobbyPlayers(data.players);
         this.renderTopicGrid();
+        this.updateTimerUI();
 
         // Update URL to include room code without reloading
         if (window.location.pathname.substring(1).toUpperCase() !== data.roomCode) {
@@ -308,10 +316,14 @@ const App = {
         // Show appropriate controls
         if (Socket.isHost) {
             document.getElementById('host-controls').style.display = 'block';
+            document.getElementById('host-timer-settings').style.display = 'block';
             document.getElementById('guest-message').style.display = 'none';
+            document.getElementById('guest-timer-status').style.display = 'none';
         } else {
             document.getElementById('host-controls').style.display = 'none';
+            document.getElementById('host-timer-settings').style.display = 'none';
             document.getElementById('guest-message').style.display = 'block';
+            document.getElementById('guest-timer-status').style.display = 'block';
         }
 
         this.showScreen('lobby-screen');
@@ -408,6 +420,33 @@ const App = {
     },
 
     /**
+     * Set timer duration (host only)
+     */
+    setTimer(duration) {
+        if (!Socket.isHost) return;
+        this.timerDuration = duration;
+        this.updateTimerUI();
+        Socket.setTimerDuration(duration);
+    },
+
+    /**
+     * Update timer selection UI
+     */
+    updateTimerUI() {
+        // Update host buttons
+        document.querySelectorAll('.timer-opt').forEach(btn => {
+            const duration = parseInt(btn.dataset.duration);
+            btn.classList.toggle('selected', duration === this.timerDuration);
+        });
+
+        // Update guest display
+        const display = document.getElementById('lobby-timer-display');
+        if (display) {
+            display.textContent = this.timerDuration === 0 ? 'No Timer' : `${this.timerDuration}s`;
+        }
+    },
+
+    /**
      * Handle game started
      */
     handleGameStarted(data) {
@@ -415,6 +454,7 @@ const App = {
         this.words = data.words;
         this.secretWord = data.secretWord;
         this.players = data.players;
+        this.timerDuration = data.timerDuration || 0;
         this.hasSubmittedHint = false;
         this.hasSubmittedVote = false;
 
@@ -530,7 +570,7 @@ const App = {
             }
         } else {
             reminder.innerHTML = `
-                <div class="role-badge mb-sm"><span class="role-icon-small">👤</span> You are a HUMAN</div>
+                <div class="role-badge mb-sm"><span class="role-icon-small">👤</span> You are NOT the FOX</div>
                 <div class="role-instruction mb-sm">Help the others find the fox!</div>
                 <div class="secret-word-highlight">The word is: <strong>${this.secretWord}</strong></div>
             `;
@@ -540,12 +580,18 @@ const App = {
         this.showScreen('hint-screen');
         document.getElementById('hint-input').focus();
 
-        // Start 15-second timer for hint writing
-        this.startTimer('hint', 15, () => {
-            if (!this.hasSubmittedHint) {
-                this.submitHint();
-            }
-        });
+        // Start timer for hint writing if enabled
+        const timerContainer = document.getElementById('hint-timer');
+        if (this.timerDuration > 0) {
+            if (timerContainer) timerContainer.style.display = 'block';
+            this.startTimer('hint', this.timerDuration, () => {
+                if (!this.hasSubmittedHint) {
+                    this.submitHint();
+                }
+            });
+        } else {
+            if (timerContainer) timerContainer.style.display = 'none';
+        }
     },
 
     /**

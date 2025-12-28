@@ -449,6 +449,20 @@ textarea.form-input {
     font-weight: 600;
 }
 
+.timer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    justify-content: center;
+}
+
+.timer-opt.selected {
+    background: var(--fox-gradient);
+    border-color: var(--fox-orange);
+    color: white;
+    box-shadow: var(--shadow-glow);
+}
+
 /* ===== Word Grid ===== */
 .word-grid {
     display: grid;

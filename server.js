@@ -114,7 +114,8 @@ function createRoom(hostId, hostName) {
         scores: new Map(),
         peekPlayerId: null,
         escapeGuess: null,
-        roundNumber: 0
+        roundNumber: 0,
+        timerDuration: 15 // Default 15 seconds
     };
 
     room.players.set(hostId, {
@@ -165,6 +166,16 @@ function getPlayersList(room) {
     }));
 }
 
+// Get room data for sync
+function getRoomData(room) {
+    return {
+        roomCode: room.code,
+        hostId: room.hostId,
+        players: getPlayersList(room),
+        timerDuration: room.timerDuration
+    };
+}
+
 // Start a new game round
 function startGame(room, topic) {
     const pack = WORD_PACKS[topic];
@@ -203,7 +214,8 @@ function startGame(room, topic) {
             players: getPlayersList(room),
             topic: room.topic,
             peekPlayerId,
-            peekPlayerName
+            peekPlayerName,
+            timerDuration: room.timerDuration
         });
     });
 
@@ -561,10 +573,25 @@ wss.on('connection', (ws) => {
                     type: 'ROOM_CREATED',
                     roomCode: room.code,
                     playerId,
-                    players: getPlayersList(room)
+                    players: getPlayersList(room),
+                    timerDuration: room.timerDuration
                 }));
 
                 console.log(`Room ${room.code} created by ${message.playerName}`);
+                break;
+            }
+
+            case 'SET_TIMER': {
+                const room = getRoom(roomCode);
+                if (!room || playerId !== room.hostId) return;
+
+                room.timerDuration = parseInt(message.duration);
+                console.log(`Room ${room.code} timer set to ${room.timerDuration}s`);
+
+                broadcast(room, {
+                    type: 'TIMER_UPDATED',
+                    duration: room.timerDuration
+                });
                 break;
             }
 
@@ -621,7 +648,8 @@ wss.on('connection', (ws) => {
                     roomCode: room.code,
                     playerId,
                     hostId: room.hostId,
-                    players: getPlayersList(room)
+                    players: getPlayersList(room),
+                    timerDuration: room.timerDuration
                 }));
 
                 broadcast(room, {
