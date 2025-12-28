@@ -655,9 +655,24 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
-                // Check for duplicate name
+                // Generate a default name if not provided
+                let name = message.playerName;
+                if (!name || name.trim() === '') {
+                    const count = room.players.size + 1;
+                    name = `Player ${count}`;
+
+                    // Ensure name is unique
+                    let suffix = 1;
+                    const existingNames = Array.from(room.players.values()).map(p => p.name.toLowerCase());
+                    while (existingNames.includes(name.toLowerCase())) {
+                        name = `Player ${count}-${suffix}`;
+                        suffix++;
+                    }
+                }
+
+                // Check for duplicate name if provided by user
                 const existingNames = Array.from(room.players.values()).map(p => p.name.toLowerCase());
-                if (existingNames.includes(message.playerName.toLowerCase())) {
+                if (message.playerName && existingNames.includes(message.playerName.toLowerCase())) {
                     ws.send(JSON.stringify({
                         type: 'ERROR',
                         message: 'Name already taken'
@@ -670,7 +685,7 @@ wss.on('connection', (ws) => {
 
                 room.players.set(playerId, {
                     id: playerId,
-                    name: message.playerName,
+                    name: name,
                     connected: true,
                     ws
                 });
@@ -689,11 +704,51 @@ wss.on('connection', (ws) => {
                 broadcast(room, {
                     type: 'PLAYER_JOINED',
                     playerId,
-                    playerName: message.playerName,
+                    playerName: name,
                     players: getPlayersList(room)
                 }, playerId);
 
-                console.log(`${message.playerName} joined room ${room.code}`);
+                console.log(`${name} joined room ${room.code}`);
+                break;
+            }
+
+            case 'UPDATE_NAME': {
+                const room = getRoom(roomCode);
+                if (!room) return;
+
+                const player = room.players.get(playerId);
+                if (!player) return;
+
+                const newName = message.newName?.trim();
+                if (!newName || newName.length > 20) return;
+
+                // Only allow name change in Lobby or Results phase
+                if (room.phase !== PHASES.LOBBY && room.phase !== PHASES.RESULTS) {
+                    return;
+                }
+
+                // Check if name is taken
+                const existingNames = Array.from(room.players.values())
+                    .filter(p => p.id !== playerId)
+                    .map(p => p.name.toLowerCase());
+
+                if (existingNames.includes(newName.toLowerCase())) {
+                    ws.send(JSON.stringify({
+                        type: 'ERROR',
+                        message: 'Name already taken'
+                    }));
+                    return;
+                }
+
+                const oldName = player.name;
+                player.name = newName;
+
+                console.log(`Player ${playerId} changed name: ${oldName} -> ${newName}`);
+
+                broadcast(room, {
+                    type: 'PLAYER_UPDATED',
+                    players: getPlayersList(room)
+                });
                 break;
             }
 

@@ -106,10 +106,8 @@ const App = {
         const path = window.location.pathname.substring(1).toUpperCase();
         // If it looks like a room code (4 chars)
         if (path.length === 4 && /^[A-Z0-9]+$/.test(path)) {
-            // Fill join input and show join screen
-            const codeInput = document.getElementById('room-code-input');
-            if (codeInput) codeInput.value = path;
-            this.showJoinRoom();
+            // Join immediately with a default name
+            Socket.joinRoom(path);
         } else if (path === '') {
             // Root path - show welcome unless we are already in a game
             // (We don't want to force welcome if they are already in lobby/game)
@@ -142,6 +140,14 @@ const App = {
 
         Socket.onRoomJoined = (data) => {
             this.showLobby(data);
+        };
+
+        Socket.onPlayerUpdated = (data) => {
+            this.updateLobbyPlayers(data.players);
+            // If in results screen, we might need to update that too
+            if (document.getElementById('results-screen').classList.contains('active')) {
+                this.updateResultsPlayers(data.players);
+            }
         };
 
         Socket.onPlayerJoined = (data) => {
@@ -346,13 +352,26 @@ const App = {
         this.players = players;
         const container = document.getElementById('lobby-players');
 
-        container.innerHTML = players.map(p => `
-      <div class="lobby-player ${p.connected ? '' : 'disconnected'}">
-        <span class="player-status-dot ${p.connected ? 'online' : 'offline'}"></span>
-        <span class="player-name">${p.name} <span class="player-score-inline">(${p.score || 0} pts)</span></span>
-        ${p.isHost ? '<span class="host-badge">HOST</span>' : ''}
-      </div>
-    `).join('');
+        container.innerHTML = players.map(p => {
+            const isMe = p.id === Socket.playerId;
+            return `
+                <div class="lobby-player ${p.connected ? '' : 'disconnected'} ${isMe ? 'is-me' : ''}">
+                    <span class="player-status-dot ${p.connected ? 'online' : 'offline'}"></span>
+                    <div class="player-info">
+                        ${isMe
+                    ? `<input type="text" class="player-name-input" value="${p.name}" 
+                                      onblur="App.updatePlayerName(this.value)" 
+                                      onkeypress="if(event.key==='Enter') this.blur()"
+                                      maxlength="20">`
+                    : `<span class="player-name">${p.name}</span>`
+                }
+                        <span class="player-score-inline">(${p.score || 0} pts)</span>
+                    </div>
+                    ${p.isHost ? '<span class="host-badge">HOST</span>' : ''}
+                    ${isMe ? '<span class="edit-hint">✎ Click to change</span>' : ''}
+                </div>
+            `;
+        }).join('');
 
         // Update status text
         const statusEl = document.getElementById('lobby-status');
@@ -483,9 +502,39 @@ const App = {
      * Join room from public list
      */
     joinPublicRoom(code) {
-        const codeInput = document.getElementById('room-code-input');
-        if (codeInput) codeInput.value = code;
-        this.showJoinRoom();
+        Socket.joinRoom(code);
+    },
+
+    /**
+     * Update player name on server
+     */
+    updatePlayerName(newName) {
+        if (!newName || !newName.trim()) return;
+        Socket.updateName(newName.trim());
+    },
+
+    /**
+     * Update results scoreboard (if name changed)
+     */
+    updateResultsPlayers(players) {
+        this.players = players;
+        // Re-render scoreboard if it matches the current scores structure
+        // This is a simplified update
+        const scoreboard = document.getElementById('scoreboard');
+        if (scoreboard) {
+            // We just need to update the names in the scoreboard items
+            const items = scoreboard.querySelectorAll('.scoreboard-item');
+            items.forEach(item => {
+                const pid = item.dataset.playerId;
+                const p = players.find(player => player.id === pid);
+                if (p) {
+                    const input = item.querySelector('.player-name-input');
+                    const span = item.querySelector('.player-name');
+                    if (input) input.value = p.name;
+                    if (span) span.textContent = p.name;
+                }
+            });
+        }
     },
 
     /**
@@ -929,16 +978,25 @@ const App = {
         // Render scoreboard
         const scoreboard = document.getElementById('scoreboard');
         scoreboard.innerHTML = data.scores.map(s => {
+            const isMe = s.playerId === Socket.playerId;
             const changeHtml = s.change > 0
                 ? `<span class="score-change positive">+${s.change}</span>`
                 : '';
 
             return `
-        <div class="score-row ${s.isFox ? 'fox-row' : ''}">
+        <div class="score-row ${s.isFox ? 'fox-row' : ''} ${isMe ? 'is-me' : ''}" data-player-id="${s.playerId}">
           <span class="score-name">
-            ${s.isFox ? '🦊 ' : ''}${s.playerName}
+            ${s.isFox ? '🦊 ' : ''}
+            ${isMe
+                    ? `<input type="text" class="player-name-input" value="${s.playerName}" 
+                          onblur="App.updatePlayerName(this.value)" 
+                          onkeypress="if(event.key==='Enter') this.blur()"
+                          maxlength="20">`
+                    : `<span class="player-name">${s.playerName}</span>`
+                }
           </span>
           <span class="score-value">${s.score}${changeHtml}</span>
+          ${isMe ? '<div class="edit-hint-mini">✎ Click to change name</div>' : ''}
         </div>
       `;
         }).join('');

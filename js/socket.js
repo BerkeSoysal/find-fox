@@ -33,6 +33,7 @@ const Socket = {
     onGameOver: null,
     onReturnToLobby: null,
     onPublicRoomsList: null,
+    onPlayerUpdated: null,
 
     /**
      * Connect to WebSocket server
@@ -159,6 +160,10 @@ const Socket = {
                 if (this.onPublicRoomsList) this.onPublicRoomsList(message.rooms);
                 break;
 
+            case 'PLAYER_UPDATED':
+                if (this.onPlayerUpdated) this.onPlayerUpdated(message);
+                break;
+
             case 'ERROR':
                 console.error('Server error:', message.message);
                 if (this.onError) this.onError(new Error(message.message));
@@ -214,11 +219,21 @@ const Socket = {
     /**
      * Join an existing room
      */
-    joinRoom(roomCode, playerName) {
+    joinRoom(roomCode, playerName = null) {
         this.send({
             type: 'JOIN_ROOM',
             roomCode: roomCode.toUpperCase(),
             playerName
+        });
+    },
+
+    /**
+     * Update player name
+     */
+    updateName(newName) {
+        this.send({
+            type: 'UPDATE_NAME',
+            newName
         });
     },
 

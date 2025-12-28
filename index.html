@@ -97,33 +97,6 @@
       </div>
     </div>
 
-    <!-- Join Room Screen -->
-    <div id="join-room-screen" class="screen">
-      <div class="glass-card">
-        <h2 class="mb-lg">🔗 Join Game</h2>
-        <p class="text-muted mb-lg">Enter the room code and your name</p>
-
-        <div class="form-group">
-          <label class="form-label">Room Code</label>
-          <input type="text" id="room-code-input" class="form-input room-code-input" placeholder="XXXX" maxlength="4"
-            oninput="this.value = this.value.toUpperCase()">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Your Name</label>
-          <input type="text" id="join-name-input" class="form-input" placeholder="Enter your name..." maxlength="20"
-            onkeypress="if(event.key==='Enter') App.joinRoom()">
-        </div>
-
-        <button class="btn btn-primary btn-block" onclick="App.joinRoom()">
-          Join Room
-        </button>
-
-        <button class="btn btn-secondary btn-block mt-lg" onclick="App.showWelcome()">
-          ← Back
-        </button>
-      </div>
-    </div>
 
     <!-- Lobby Screen -->
     <div id="lobby-screen" class="screen">
