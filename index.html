@@ -96,7 +96,7 @@
         <div class="room-code-display">
           <p class="text-muted">Room Code</p>
           <h1 id="lobby-room-code" class="room-code" onclick="App.copyRoomCode()">----</h1>
-          <p class="copy-hint">Tap to copy</p>
+          <p class="copy-hint">Tap to copy link</p>
         </div>
 
         <h3 class="mb-md">👥 Players</h3>
@@ -148,6 +148,17 @@
     <!-- Hint Writing Screen (Simultaneous) - With Word Grid Always Visible -->
     <div id="hint-screen" class="screen">
       <div class="glass-card">
+        <!-- Phase timer -->
+        <div id="hint-timer" class="timer-container mb-lg">
+          <div class="timer-header">
+            <span class="timer-label">Time Remaining</span>
+            <span id="hint-timer-text" class="timer-countdown">15</span>
+          </div>
+          <div class="timer-bar">
+            <div id="hint-timer-bar" class="timer-fill"></div>
+          </div>
+        </div>
+
         <!-- Progress bar -->
         <div id="hint-progress-container" class="progress-container mb-lg">
           <div class="progress-text">
@@ -201,30 +212,7 @@
       </div>
     </div>
 
-    <!-- Hints Reveal Screen - With Word Grid -->
-    <div id="reveal-screen" class="screen">
-      <div class="glass-card">
-        <h2 class="text-center mb-lg">📝 All Hints</h2>
 
-        <!-- Word Grid - Always visible -->
-        <div class="word-grid-section">
-          <p class="text-muted text-center mb-sm">Word Grid</p>
-          <div class="word-grid word-grid-compact" id="reveal-word-grid"></div>
-        </div>
-
-        <div id="all-hints" class="hints-list"></div>
-
-        <div id="reveal-host-controls" style="display: none;">
-          <button class="btn btn-primary btn-block mt-lg" onclick="App.startVoting()">
-            Start Voting 🗳️
-          </button>
-        </div>
-
-        <div id="reveal-guest-message" class="text-center mt-lg" style="display: none;">
-          <p class="text-muted">Waiting for host to start voting...</p>
-        </div>
-      </div>
-    </div>
 
     <!-- Voting Screen (Simultaneous) - With Word Grid -->
     <div id="voting-screen" class="screen">

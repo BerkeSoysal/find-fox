@@ -17,6 +17,65 @@ const App = {
     peekPlayerId: null,
     peekPlayerName: null,
 
+    // Timer state
+    timers: {},
+
+    /**
+     * Start a countdown timer
+     */
+    startTimer(name, seconds, onComplete) {
+        // Clear any existing timer with this name
+        this.stopTimer(name);
+
+        let remaining = seconds;
+        const timerBar = document.getElementById(`${name}-timer-bar`);
+        const timerText = document.getElementById(`${name}-timer-text`);
+
+        const updateTimer = () => {
+            if (timerBar) {
+                const percent = (remaining / seconds) * 100;
+                timerBar.style.width = percent + '%';
+                if (remaining <= 5) {
+                    timerBar.classList.add('danger');
+                } else if (remaining <= 10) {
+                    timerBar.classList.add('warning');
+                }
+            }
+            if (timerText) {
+                timerText.textContent = remaining;
+            }
+        };
+
+        updateTimer();
+
+        this.timers[name] = setInterval(() => {
+            remaining--;
+            updateTimer();
+
+            if (remaining <= 0) {
+                this.stopTimer(name);
+                if (onComplete) onComplete();
+            }
+        }, 1000);
+    },
+
+    /**
+     * Stop a timer
+     */
+    stopTimer(name) {
+        if (this.timers[name]) {
+            clearInterval(this.timers[name]);
+            delete this.timers[name];
+        }
+    },
+
+    /**
+     * Stop all timers
+     */
+    stopAllTimers() {
+        Object.keys(this.timers).forEach(name => this.stopTimer(name));
+    },
+
     /**
      * Initialize app
      */
@@ -27,9 +86,36 @@ const App = {
         try {
             await Socket.connect();
             this.updateConnectionStatus('connected');
+
+            // Check if there is a room code in the URL
+            this.checkUrlForRoom();
         } catch (error) {
             this.updateConnectionStatus('disconnected');
             this.showError('Failed to connect to server');
+        }
+
+        // Listen for back/forward buttons
+        window.addEventListener('popstate', () => this.checkUrlForRoom());
+    },
+
+    /**
+     * Check current URL for a room code and update UI
+     */
+    checkUrlForRoom() {
+        const path = window.location.pathname.substring(1).toUpperCase();
+        // If it looks like a room code (4 chars)
+        if (path.length === 4 && /^[A-Z0-9]+$/.test(path)) {
+            // Fill join input and show join screen
+            const codeInput = document.getElementById('room-code-input');
+            if (codeInput) codeInput.value = path;
+            this.showJoinRoom();
+        } else if (path === '') {
+            // Root path - show welcome unless we are already in a game
+            // (We don't want to force welcome if they are already in lobby/game)
+            const activeScreen = document.querySelector('.screen.active');
+            if (!activeScreen || activeScreen.id === 'join-room-screen' || activeScreen.id === 'create-room-screen') {
+                this.showWelcome();
+            }
         }
     },
 
@@ -81,9 +167,7 @@ const App = {
             this.updatePeekHint(data);
         };
 
-        Socket.onHintsRevealed = (data) => {
-            this.showHintsReveal(data);
-        };
+
 
         Socket.onVoteSubmitted = (data) => {
             this.updateVoteProgress(data);
@@ -146,6 +230,7 @@ const App = {
      * Show a specific screen
      */
     showScreen(screenId) {
+        this.stopAllTimers();
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
     },
@@ -154,6 +239,9 @@ const App = {
      * Show welcome screen
      */
     showWelcome() {
+        if (window.location.pathname !== '/') {
+            window.history.pushState({}, '', '/');
+        }
         this.showScreen('welcome-screen');
     },
 
@@ -212,6 +300,11 @@ const App = {
         this.updateLobbyPlayers(data.players);
         this.renderTopicGrid();
 
+        // Update URL to include room code without reloading
+        if (window.location.pathname.substring(1).toUpperCase() !== data.roomCode) {
+            window.history.pushState({ roomCode: data.roomCode }, '', `/${data.roomCode}`);
+        }
+
         // Show appropriate controls
         if (Socket.isHost) {
             document.getElementById('host-controls').style.display = 'block';
@@ -234,7 +327,7 @@ const App = {
         container.innerHTML = players.map(p => `
       <div class="lobby-player ${p.connected ? '' : 'disconnected'}">
         <span class="player-status-dot ${p.connected ? 'online' : 'offline'}"></span>
-        <span class="player-name">${p.name}</span>
+        <span class="player-name">${p.name} <span class="player-score-inline">(${p.score || 0} pts)</span></span>
         ${p.isHost ? '<span class="host-badge">HOST</span>' : ''}
       </div>
     `).join('');
@@ -293,12 +386,12 @@ const App = {
      * Copy room code to clipboard
      */
     copyRoomCode() {
-        const code = document.getElementById('lobby-room-code').textContent;
-        navigator.clipboard.writeText(code).then(() => {
+        const url = window.location.href;
+        navigator.clipboard.writeText(url).then(() => {
             const hint = document.querySelector('.copy-hint');
-            hint.textContent = 'Copied!';
+            hint.textContent = 'Link Copied!';
             setTimeout(() => {
-                hint.textContent = 'Tap to copy';
+                hint.textContent = 'Tap to copy link';
             }, 2000);
         });
     },
@@ -354,9 +447,22 @@ const App = {
         content.innerHTML = `
       <div class="role-icon">${this.isFox ? '🦊' : '👤'}</div>
       <h2 class="role-title">Your Role</h2>
-      <p class="text-muted mb-xl">${this.isFox
+      <p class="text-muted mb-lg">${this.isFox
                 ? "You are the FOX! You don't know the word. Try to blend in!"
                 : "You are NOT the fox. You'll see the word next."}</p>
+                
+      <div class="standings-mini mb-xl">
+        <p class="standings-title">Current Standings</p>
+        <div class="standings-list">
+          ${this.players.sort((a, b) => b.score - a.score).map(p => `
+            <div class="standing-item">
+              <span>${p.name}</span>
+              <span class="standing-score">${p.score || 0} pts</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
       <button class="btn btn-primary btn-block" onclick="App.proceedFromRole()">
         ${this.isFox ? "I understand 🦊" : "Show me the word"}
       </button>
@@ -413,6 +519,9 @@ const App = {
                 this.showHintInput();
                 break;
             case 'voting':
+                if (data.hints) {
+                    this.hints = data.hints;
+                }
                 this.showVotingInput(data.players);
                 break;
         }
@@ -453,6 +562,13 @@ const App = {
 
         this.showScreen('hint-screen');
         document.getElementById('hint-input').focus();
+
+        // Start 15-second timer for hint writing
+        this.startTimer('hint', 15, () => {
+            if (!this.hasSubmittedHint) {
+                this.submitHint();
+            }
+        });
     },
 
     /**
@@ -486,6 +602,9 @@ const App = {
         const hint = document.getElementById('hint-input').value.trim() || '(no hint)';
         Socket.submitHint(hint);
         this.hasSubmittedHint = true;
+
+        // Stop the hint timer
+        this.stopTimer('hint');
 
         // Show submitted message
         document.getElementById('hint-submitted-message').style.display = 'flex';
@@ -534,14 +653,8 @@ const App = {
       </div>
     `).join('');
 
-        // Show appropriate controls
-        if (Socket.isHost) {
-            document.getElementById('reveal-host-controls').style.display = 'block';
-            document.getElementById('reveal-guest-message').style.display = 'none';
-        } else {
-            document.getElementById('reveal-host-controls').style.display = 'none';
-            document.getElementById('reveal-guest-message').style.display = 'block';
-        }
+        document.getElementById('reveal-host-controls').style.display = 'none';
+        document.getElementById('reveal-guest-message').style.display = 'none';
 
         this.showScreen('reveal-screen');
     },
@@ -579,8 +692,11 @@ const App = {
             });
         }
 
+        // Filter out self - can't vote for yourself
+        const otherPlayers = this.players.filter(p => p.id !== Socket.playerId);
+
         const container = document.getElementById('vote-options');
-        container.innerHTML = this.players.map(p => {
+        container.innerHTML = otherPlayers.map(p => {
             const hint = hintMap[p.id] || '(no hint)';
             return `
               <button class="vote-btn vote-btn-with-hint" data-player-id="${p.id}" 
@@ -613,6 +729,9 @@ const App = {
 
         Socket.submitVote(this.selectedVote);
         this.hasSubmittedVote = true;
+
+        // Stop the vote timer
+        this.stopTimer('vote');
 
         document.getElementById('vote-submitted-message').style.display = 'flex';
         document.getElementById('vote-input-area').style.display = 'none';
@@ -687,6 +806,7 @@ const App = {
      */
     attemptEscape() {
         if (!this.escapeGuess) return;
+        this.stopTimer('escape');
         Socket.escapeGuess(this.escapeGuess);
     },
 

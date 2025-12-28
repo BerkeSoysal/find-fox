@@ -433,6 +433,13 @@ textarea.form-input {
     font-weight: 500;
 }
 
+.player-score-inline {
+    font-size: 0.875rem;
+    color: var(--fox-orange);
+    opacity: 0.8;
+    margin-left: var(--space-xs);
+}
+
 .host-badge {
     padding: var(--space-xs) var(--space-sm);
     background: var(--fox-gradient);
@@ -540,6 +547,40 @@ textarea.form-input {
     75% {
         transform: rotate(10deg);
     }
+}
+
+.standings-mini {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.standings-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.standings-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.standing-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.standing-score {
+    font-weight: 700;
+    color: var(--fox-orange);
 }
 
 /* ===== Progress Container ===== */
@@ -966,6 +1007,69 @@ textarea.form-input {
 .phase-dot.completed {
     background: var(--success);
     border-color: var(--success);
+}
+
+/* ===== Timer System ===== */
+.timer-container {
+    margin: var(--space-md) 0;
+}
+
+.timer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-xs);
+}
+
+.timer-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05rem;
+}
+
+.timer-countdown {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--fox-orange);
+    font-variant-numeric: tabular-nums;
+}
+
+.timer-bar {
+    height: 6px;
+    background: var(--bg-card);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.timer-fill {
+    height: 100%;
+    width: 100%;
+    background: var(--fox-gradient);
+    border-radius: var(--radius-full);
+    transition: width 1s linear, background-color 0.3s ease;
+}
+
+.timer-fill.warning {
+    background: var(--warning);
+}
+
+.timer-fill.danger {
+    background: var(--danger);
+    animation: pulse-danger 0.5s ease infinite;
+}
+
+@keyframes pulse-danger {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
 }
 
 /* ===== Word Grid Section (Always Visible) ===== */

@@ -71,7 +71,6 @@ const PHASES = {
     LOBBY: 'lobby',
     ROLE_REVEAL: 'role_reveal',
     HINT_WRITING: 'hint_writing',
-    HINTS_REVEAL: 'hints_reveal',
     VOTING: 'voting',
     ESCAPE: 'escape',
     RESULTS: 'results'
@@ -161,7 +160,8 @@ function getPlayersList(room) {
         connected: p.connected,
         isHost: id === room.hostId,
         hasHint: room.hints.has(id),
-        hasVoted: room.votes.has(id)
+        hasVoted: room.votes.has(id),
+        score: room.scores.get(id) || 0
     }));
 }
 
@@ -252,17 +252,18 @@ function submitHint(room, playerId, hint) {
         players: getPlayersList(room)
     });
 
-    // Check if all hints are in - go directly to hints reveal (no separate peek phase)
+    // Check if all hints are in - go directly to voting phase
     if (room.hints.size === room.players.size) {
-        revealHints(room);
+        startVotingPhase(room);
     }
 }
 
 // Fox peek phase removed - fox now sees hints in realtime during hint writing
 
-// Move to hints reveal
-function revealHints(room) {
-    room.phase = PHASES.HINTS_REVEAL;
+// Start voting phase
+function startVotingPhase(room) {
+    room.phase = PHASES.VOTING;
+    room.votes.clear();
 
     const allHints = [];
     room.players.forEach((player, playerId) => {
@@ -274,21 +275,10 @@ function revealHints(room) {
     });
 
     broadcast(room, {
-        type: 'HINTS_REVEALED',
-        phase: PHASES.HINTS_REVEAL,
-        hints: allHints
-    });
-}
-
-// Start voting phase
-function startVotingPhase(room) {
-    room.phase = PHASES.VOTING;
-    room.votes.clear();
-
-    broadcast(room, {
         type: 'PHASE_CHANGE',
         phase: PHASES.VOTING,
-        players: getPlayersList(room)
+        players: getPlayersList(room),
+        hints: allHints
     });
 }
 
@@ -489,21 +479,43 @@ function handleDisconnect(room, playerId) {
 
 // Create HTTP server for serving static files
 const httpServer = http.createServer((req, res) => {
-    let filePath = req.url === '/' ? '/index.html' : req.url;
-    filePath = path.join(__dirname, filePath);
+    let urlPath = req.url.split('?')[0]; // Remove query strings
 
-    const ext = path.extname(filePath);
+    // Static file mapping
+    let filePath = urlPath === '/' ? '/index.html' : urlPath;
+
+    // Check if the path is a 4-character room code (e.g., /ABCD)
+    // We only do this if it's not a root path and has no extension
+    const pathParts = urlPath.split('/').filter(p => p);
+    if (pathParts.length === 1 && pathParts[0].length === 4 && !path.extname(urlPath)) {
+        filePath = '/index.html';
+    }
+
+    const absolutePath = path.join(__dirname, filePath);
+    const ext = path.extname(absolutePath);
+
     const contentTypes = {
         '.html': 'text/html',
         '.css': 'text/css',
         '.js': 'application/javascript',
-        '.json': 'application/json'
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.ico': 'image/x-icon'
     };
 
-    fs.readFile(filePath, (err, data) => {
+    fs.readFile(absolutePath, (err, data) => {
         if (err) {
-            res.writeHead(404);
-            res.end('Not found');
+            // If file not found, still serve index.html for SPA routing
+            fs.readFile(path.join(__dirname, 'index.html'), (err2, data2) => {
+                if (err2) {
+                    res.writeHead(404);
+                    res.end('Not found');
+                    return;
+                }
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(data2);
+            });
             return;
         }
         res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
