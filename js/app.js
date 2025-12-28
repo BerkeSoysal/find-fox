@@ -277,6 +277,7 @@ const App = {
      */
     createRoom() {
         const name = document.getElementById('host-name-input').value.trim();
+        const roomName = document.getElementById('room-name-input').value.trim();
         const isPublic = document.getElementById('room-public-toggle').checked;
         const maxPlayers = parseInt(document.getElementById('max-players-range').value);
 
@@ -284,7 +285,7 @@ const App = {
             this.showError('Please enter your name');
             return;
         }
-        Socket.createRoom(name, isPublic, maxPlayers);
+        Socket.createRoom(name, isPublic, maxPlayers, roomName || null);
     },
 
     /**
@@ -311,6 +312,7 @@ const App = {
      */
     showLobby(data) {
         document.getElementById('lobby-room-code').textContent = data.roomCode;
+        document.getElementById('lobby-room-name').textContent = data.roomName || 'Unnamed Room';
         this.timerDuration = data.timerDuration || 15;
         this.updateLobbyPlayers(data.players);
         this.renderTopicGrid();
@@ -469,8 +471,8 @@ const App = {
         list.innerHTML = rooms.map(room => `
             <div class="public-room-item" onclick="App.joinPublicRoom('${room.roomCode}')">
                 <div class="room-info">
-                    <span class="room-code-tag">${room.roomCode}</span>
-                    <span class="player-count-tag">Lobby • ${room.playerCount}/${room.maxPlayers} players</span>
+                    <span class="room-code-tag">${room.roomName || room.roomCode}</span>
+                    <span class="player-count-tag">${room.roomName ? room.roomCode + ' • ' : ''}Lobby • ${room.playerCount}/${room.maxPlayers} players</span>
                 </div>
                 <button class="btn btn-secondary btn-small">Join →</button>
             </div>

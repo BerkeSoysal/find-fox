@@ -182,12 +182,13 @@ const Socket = {
     /**
      * Create a new room
      */
-    createRoom(playerName, isPublic = false, maxPlayers = 6) {
+    createRoom(playerName, isPublic = false, maxPlayers = 6, roomName = null) {
         this.send({
             type: 'CREATE_ROOM',
             playerName,
             isPublic,
-            maxPlayers
+            maxPlayers,
+            roomName
         });
     },
 

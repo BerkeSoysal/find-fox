@@ -98,10 +98,11 @@ function generatePlayerId() {
 }
 
 // Create a new room
-function createRoom(hostId, hostName, isPublic = false, maxPlayers = 6) {
+function createRoom(hostId, hostName, isPublic = false, maxPlayers = 6, roomName = null) {
     const code = generateRoomCode();
     const room = {
         code,
+        name: roomName || `${hostName}'s Room`,
         hostId,
         phase: PHASES.LOBBY,
         players: new Map(),
@@ -172,6 +173,7 @@ function getPlayersList(room) {
 function getRoomData(room) {
     return {
         roomCode: room.code,
+        roomName: room.name,
         hostId: room.hostId,
         players: getPlayersList(room),
         timerDuration: room.timerDuration,
@@ -187,6 +189,7 @@ function getPublicRooms() {
         if (room.isPublic && room.phase === PHASES.LOBBY) {
             list.push({
                 roomCode: room.code,
+                roomName: room.name,
                 playerCount: room.players.size,
                 maxPlayers: room.maxPlayers
             });
@@ -582,7 +585,7 @@ wss.on('connection', (ws) => {
         switch (message.type) {
             case 'CREATE_ROOM': {
                 playerId = generatePlayerId();
-                const room = createRoom(playerId, message.playerName, message.isPublic, message.maxPlayers);
+                const room = createRoom(playerId, message.playerName, message.isPublic, message.maxPlayers, message.roomName);
                 roomCode = room.code;
 
                 const player = room.players.get(playerId);
@@ -591,6 +594,7 @@ wss.on('connection', (ws) => {
                 ws.send(JSON.stringify({
                     type: 'ROOM_CREATED',
                     roomCode: room.code,
+                    roomName: room.name,
                     playerId,
                     players: getPlayersList(room),
                     timerDuration: room.timerDuration,
@@ -598,7 +602,7 @@ wss.on('connection', (ws) => {
                     maxPlayers: room.maxPlayers
                 }));
 
-                console.log(`Room ${room.code} created by ${message.playerName} (Public: ${room.isPublic}, Max: ${room.maxPlayers})`);
+                console.log(`Room ${room.code} ("${room.name}") created by ${message.playerName}`);
                 break;
             }
 
@@ -675,6 +679,7 @@ wss.on('connection', (ws) => {
                 ws.send(JSON.stringify({
                     type: 'ROOM_JOINED',
                     roomCode: room.code,
+                    roomName: room.name,
                     playerId,
                     hostId: room.hostId,
                     players: getPlayersList(room),

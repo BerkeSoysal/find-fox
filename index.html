@@ -63,6 +63,12 @@
             onkeypress="if(event.key==='Enter') App.createRoom()">
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Room Name (Optional)</label>
+          <input type="text" id="room-name-input" class="form-input" placeholder="e.g. My Awesome Room" maxlength="30"
+            onkeypress="if(event.key==='Enter') App.createRoom()">
+        </div>
+
         <div class="form-row mb-lg">
           <div class="form-group flex-1 mr-md">
             <label class="form-label">Privacy</label>
@@ -123,8 +129,10 @@
     <div id="lobby-screen" class="screen">
       <div class="glass-card">
         <div class="room-code-display">
-          <p class="text-muted">Room Code</p>
-          <h1 id="lobby-room-code" class="room-code" onclick="App.copyRoomCode()">----</h1>
+          <p class="text-muted" id="lobby-room-name-label">Room</p>
+          <h1 id="lobby-room-name" class="mb-sm">----</h1>
+          <p class="text-muted">Code</p>
+          <h2 id="lobby-room-code" class="room-code mb-sm" onclick="App.copyRoomCode()">----</h2>
           <p class="copy-hint">Tap to copy link</p>
         </div>
 
