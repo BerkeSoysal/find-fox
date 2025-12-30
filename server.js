@@ -199,7 +199,7 @@ function getFullSyncData(room, playerId) {
         // Game state
         topic: room.topic,
         words: room.words,
-        secretWord: (room.phase === PHASES.RESULTS || playerId === room.foxId) ? room.secretWord : null,
+        secretWord: (room.phase === PHASES.RESULTS || playerId !== room.foxId) ? room.secretWord : null,
         isFox: playerId === room.foxId,
         hints: Array.from(room.hints.entries()).map(([pid, hint]) => ({ playerId: pid, hint })),
         votes: Array.from(room.votes.entries()).map(([pid, v]) => ({ playerId: pid, targetId: v })),
