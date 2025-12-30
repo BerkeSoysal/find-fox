@@ -116,6 +116,9 @@ function createRoom(hostId, hostName, isPublic = false, maxPlayers = 6, roomName
         peekPlayerId: null,
         escapeGuess: null,
         roundNumber: 0,
+        lastResult: null,
+        lastFinders: [],
+        lastScoreChanges: null,
         timerDuration: 15, // Default 15 seconds
         isPublic,
         maxPlayers: Math.min(Math.max(parseInt(maxPlayers) || 6, 3), 6)
@@ -179,6 +182,36 @@ function getRoomData(room) {
         timerDuration: room.timerDuration,
         isPublic: room.isPublic,
         maxPlayers: room.maxPlayers
+    };
+}
+
+function getFullSyncData(room, playerId) {
+    return {
+        roomCode: room.code,
+        roomName: room.name,
+        hostId: room.hostId,
+        playerId: playerId,
+        phase: room.phase,
+        players: getPlayersList(room),
+        timerDuration: room.timerDuration,
+        isPublic: room.isPublic,
+        maxPlayers: room.maxPlayers,
+        // Game state
+        topic: room.topic,
+        words: room.words,
+        secretWord: (room.phase === PHASES.RESULTS || playerId === room.foxId) ? room.secretWord : null,
+        isFox: playerId === room.foxId,
+        hints: Array.from(room.hints.entries()).map(([pid, hint]) => ({ playerId: pid, hint })),
+        votes: Array.from(room.votes.entries()).map(([pid, v]) => ({ playerId: pid, targetId: v })),
+        roundNumber: room.roundNumber,
+        // End game details for Results screen re-sync
+        lastResult: room.lastResult,
+        lastFinders: room.lastFinders,
+        lastScoreChanges: room.lastScoreChanges ? Array.from(room.lastScoreChanges.entries()).map(([pid, change]) => ({ playerId: pid, change })) : [],
+        foxId: room.foxId,
+        peekPlayerId: playerId === room.foxId ? room.peekPlayerId : null,
+        peekPlayerName: playerId === room.foxId ? room.players.get(room.peekPlayerId)?.name : null,
+        escapeGuess: room.escapeGuess
     };
 }
 
@@ -441,6 +474,9 @@ function calculateScores(room, foxCaught, foxEscaped, finders) {
 // Show results
 function showResults(room, result, scoreChanges, finders) {
     room.phase = PHASES.RESULTS;
+    room.lastResult = result;
+    room.lastFinders = finders.map(id => room.players.get(id)?.name || 'Unknown');
+    room.lastScoreChanges = scoreChanges;
 
     const scores = [];
     room.players.forEach((player, playerId) => {
@@ -511,7 +547,7 @@ function handleDisconnect(room, playerId) {
                         console.log(`Room ${room.code} deleted (all players left)`);
                     }
                 }
-            }, 60000); // 1 minute cleanup delay
+            }, 300000); // 5 minute cleanup delay
         }
     }
 }
@@ -625,6 +661,39 @@ wss.on('connection', (ws) => {
                     type: 'TIMER_UPDATED',
                     duration: room.timerDuration
                 });
+                break;
+            }
+
+            case 'REJOIN_ROOM': {
+                const room = getRoom(message.roomCode);
+                if (!room) {
+                    ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+                    return;
+                }
+
+                const player = room.players.get(message.playerId);
+                if (!player) {
+                    ws.send(JSON.stringify({ type: 'ERROR', message: 'Session expired' }));
+                    return;
+                }
+
+                // Update session
+                playerId = player.id;
+                roomCode = room.code;
+                player.ws = ws;
+                player.connected = true;
+
+                ws.send(JSON.stringify({
+                    type: 'FULL_SYNC',
+                    data: getFullSyncData(room, playerId)
+                }));
+
+                broadcast(room, {
+                    type: 'PLAYER_UPDATED',
+                    players: getPlayersList(room)
+                }, playerId);
+
+                console.log(`${player.name} rejoined room ${roomCode}`);
                 break;
             }
 

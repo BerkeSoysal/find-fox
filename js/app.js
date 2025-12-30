@@ -104,17 +104,30 @@ const App = {
      */
     checkUrlForRoom() {
         const path = window.location.pathname.substring(1).toUpperCase();
+        console.log(`Checking URL for room. Path: "${path}"`);
+
         // If it looks like a room code (4 chars)
         if (path.length === 4 && /^[A-Z0-9]+$/.test(path)) {
-            // Join immediately with a default name
-            Socket.joinRoom(path);
+            // Check if we have a saved session for this room
+            const savedSession = this.getSession(path);
+            if (savedSession) {
+                console.log(`Found saved session for room ${path}, attempting to rejoin...`);
+                Socket.rejoinRoom(path, savedSession.playerId);
+            } else {
+                console.log(`No session for room ${path}, joining as new player...`);
+                // Join immediately with a default name
+                Socket.joinRoom(path);
+            }
         } else if (path === '') {
+            console.log('Root path detected, showing welcome screen.');
             // Root path - show welcome unless we are already in a game
-            // (We don't want to force welcome if they are already in lobby/game)
             const activeScreen = document.querySelector('.screen.active');
-            if (!activeScreen || activeScreen.id === 'join-room-screen' || activeScreen.id === 'create-room-screen') {
+            if (!activeScreen || activeScreen.id === 'create-room-screen' || activeScreen.id === 'welcome-screen') {
                 this.showWelcome();
             }
+        } else {
+            console.log(`Invalid path: "${path}", redirected to welcome.`);
+            this.showWelcome();
         }
     },
 
@@ -132,14 +145,35 @@ const App = {
 
         Socket.onError = (error) => {
             this.showError(error.message || 'Connection error');
+
+            // Handle specific room errors
+            if (error.message === 'Room not found' || error.message === 'Session expired' || error.message === 'Game already in progress') {
+                const path = window.location.pathname.substring(1).toUpperCase();
+                if (path.length === 4) {
+                    if (Socket.socketType === 'rejoin') {
+                        console.log('Rejoin failed, clearing session and joining as new player...');
+                        localStorage.removeItem(`fox_game_${path}`);
+                        Socket.joinRoom(path);
+                    } else {
+                        // If join failed too, or game in progress, go back to welcome
+                        this.showWelcome();
+                    }
+                }
+            }
         };
 
         Socket.onRoomCreated = (data) => {
+            this.saveSession(data.roomCode, data.playerId);
             this.showLobby(data);
         };
 
         Socket.onRoomJoined = (data) => {
+            this.saveSession(data.roomCode, data.playerId);
             this.showLobby(data);
+        };
+
+        Socket.onFullSync = (data) => {
+            this.handleFullSync(data);
         };
 
         Socket.onPlayerUpdated = (data) => {
@@ -274,8 +308,15 @@ const App = {
      * Show join room screen
      */
     showJoinRoom() {
-        this.showScreen('join-room-screen');
-        document.getElementById('room-code-input').focus();
+        const code = prompt('Enter 4-character Room Code:');
+        if (code) {
+            const formattedCode = code.trim().toUpperCase();
+            if (formattedCode.length === 4) {
+                Socket.joinRoom(formattedCode);
+            } else {
+                this.showError('Invalid room code format');
+            }
+        }
     },
 
     /**
@@ -298,19 +339,8 @@ const App = {
      * Join an existing room
      */
     joinRoom() {
-        const code = document.getElementById('room-code-input').value.trim().toUpperCase();
-        const name = document.getElementById('join-name-input').value.trim();
-
-        if (!code || code.length !== 4) {
-            this.showError('Please enter a valid 4-character room code');
-            return;
-        }
-        if (!name) {
-            this.showError('Please enter your name');
-            return;
-        }
-
-        Socket.joinRoom(code, name);
+        // This function is now handled by showJoinRoom with a prompt
+        this.showJoinRoom();
     },
 
     /**
@@ -353,13 +383,18 @@ const App = {
         const container = document.getElementById('lobby-players');
         if (!container) return;
 
-        // BUG FIX: If we are currently typing in the name input, do NOT re-render the lobby list
-        // because it will wipe the input field and cause focus loss (especially for the '4th player').
+        // Efficient update: only update the DOM if the user is NOT typing
         const activeInput = document.activeElement;
         if (activeInput && activeInput.classList.contains('player-name-input')) {
-            // Only update the data model, skip the UI update for now. 
-            // The UI will catch up when the user blurs the input.
-            return;
+            // Check if context has changed (e.g. player count changed)
+            // If the number of players changed, we MUST re-render to show new players
+            // but we'll try to preserve the cursor position/value if possible.
+            // For now, if someone is typing, we skip re-rendering the whole container
+            // unless the player count changed.
+            const currentItems = container.querySelectorAll('.lobby-player').length;
+            if (currentItems === players.length) {
+                return;
+            }
         }
 
         container.innerHTML = players.map(p => {
@@ -410,12 +445,15 @@ const App = {
         const grid = document.getElementById('lobby-topic-grid');
         const topics = getAllTopics();
 
-        grid.innerHTML = topics.map(t => `
-      <button class="topic-btn" data-topic="${t.key}" onclick="App.selectTopic('${t.key}')">
-        <span class="topic-icon">${t.icon}</span>
-        ${t.name}
-      </button>
-    `).join('');
+        grid.innerHTML = topics.map(t => {
+            const isSelected = t.key === this.selectedTopic;
+            return `
+                <button class="topic-btn ${isSelected ? 'selected' : ''}" data-topic="${t.key}" onclick="App.selectTopic('${t.key}')">
+                    <span class="topic-icon">${t.icon}</span>
+                    ${t.name}
+                </button>
+            `;
+        }).join('');
     },
 
     /**
@@ -528,23 +566,29 @@ const App = {
      */
     updateResultsPlayers(players) {
         this.players = players;
-        // Re-render scoreboard if it matches the current scores structure
-        // This is a simplified update
         const scoreboard = document.getElementById('scoreboard');
-        if (scoreboard) {
-            // Fix: selector was .scoreboard-item, should be .score-row
-            const items = scoreboard.querySelectorAll('.score-row');
-            items.forEach(item => {
-                const pid = item.dataset.playerId;
-                const p = players.find(player => player.id === pid);
-                if (p) {
-                    const input = item.querySelector('.player-name-input');
-                    const span = item.querySelector('.player-name');
-                    if (input) input.value = p.name;
-                    if (span) span.textContent = p.name;
+        if (!scoreboard) return;
+
+        const activeInput = document.activeElement;
+        const isTyping = activeInput && activeInput.classList.contains('player-name-input');
+
+        const items = scoreboard.querySelectorAll('.score-row');
+        items.forEach(item => {
+            const pid = item.dataset.playerId;
+            const p = players.find(player => player.id === pid);
+            if (p) {
+                const input = item.querySelector('.player-name-input');
+                const span = item.querySelector('.player-name');
+
+                // Only update input if it's NOT the one we're currently typing in
+                if (input && input !== activeInput) {
+                    input.value = p.name;
                 }
-            });
-        }
+                if (span) {
+                    span.textContent = p.name;
+                }
+            }
+        });
     },
 
     /**
@@ -1060,6 +1104,117 @@ const App = {
         }
 
         this.showScreen('lobby-screen');
+    },
+
+    /**
+     * Session management
+     */
+    saveSession(roomCode, playerId) {
+        localStorage.setItem(`fox_game_${roomCode}`, JSON.stringify({ roomCode, playerId }));
+    },
+
+    getSession(roomCode) {
+        const session = localStorage.getItem(`fox_game_${roomCode}`);
+        return session ? JSON.parse(session) : null;
+    },
+
+    /**
+     * Handle FULL_SYNC from server
+     */
+    handleFullSync(data) {
+        console.log('Rejoined game, syncing state...', data);
+
+        // Update local state
+        this.isFox = data.isFox;
+        this.secretWord = data.secretWord;
+        this.selectedTopic = data.topic;
+        this.words = data.words;
+        this.players = data.players;
+        this.hints = data.hints || [];
+        this.votes = data.votes || [];
+
+        this.timerDuration = data.timerDuration;
+        this.peekPlayerId = data.peekPlayerId;
+        this.peekPlayerName = data.peekPlayerName;
+
+        // Sync submission status
+        this.hasSubmittedHint = data.hints.some(h => h.playerId === Socket.playerId);
+        this.hasSubmittedVote = data.votes.some(v => v.playerId === Socket.playerId);
+
+        // Reconstruct UI based on phase
+        switch (data.phase) {
+            case 'lobby':
+                this.showLobby(data);
+                break;
+            case 'hint_writing':
+                this.showHintInput();
+                // If already submitted, hide the input area manually
+                if (this.hasSubmittedHint) {
+                    document.getElementById('hint-submitted-message').style.display = 'flex';
+                    document.getElementById('hint-input-area').style.display = 'none';
+                    const foxPeekSection = document.getElementById('fox-peek-section');
+                    if (foxPeekSection) foxPeekSection.style.display = 'none';
+                }
+                // Update progress after rendering screen
+                this.updateHintProgress({
+                    players: data.players,
+                    hintsCount: data.hints.length,
+                    totalPlayers: data.players.length
+                });
+                break;
+            case 'voting':
+                // Convert hints map back to array for compatibility with showVotingInput if needed
+                // though showVotingInput uses this.hints
+                this.showVotingInput(data.players);
+                // If already voted, show the submitted message
+                if (this.hasSubmittedVote) {
+                    document.getElementById('vote-submitted-message').style.display = 'flex';
+                    document.getElementById('vote-input-area').style.display = 'none';
+                }
+                // Update progress after rendering screen
+                this.updateVoteProgress({
+                    voterId: null,
+                    votesCount: data.votes.length,
+                    totalPlayers: data.players.length,
+                    players: data.players
+                });
+                break;
+            case 'escape':
+                if (this.isFox) {
+                    this.showEscapePhase(data);
+                } else {
+                    // Find fox name from players list
+                    const fox = data.players.find(p => p.id === data.foxId);
+                    data.foxName = fox ? fox.name : 'The Fox';
+                    this.showWaitingEscape(data);
+                }
+                break;
+            case 'results':
+                if (data.lastResult) {
+                    this.showResults({
+                        result: data.lastResult,
+                        foxId: data.foxId,
+                        foxName: data.players.find(p => p.id === data.foxId)?.name,
+                        secretWord: data.secretWord,
+                        escapeGuess: data.escapeGuess,
+                        finders: data.lastFinders,
+                        scores: data.players.map(p => ({
+                            playerId: p.id,
+                            playerName: p.name,
+                            score: p.score,
+                            change: (data.lastScoreChanges.find(sc => sc.playerId === p.id) || {}).change || 0,
+                            isFox: p.id === data.foxId
+                        })),
+                        players: data.players
+                    });
+                } else {
+                    this.showLobby(data);
+                }
+                break;
+            default:
+                this.showLobby(data);
+                break;
+        }
     }
 };
 

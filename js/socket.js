@@ -34,6 +34,7 @@ const Socket = {
     onReturnToLobby: null,
     onPublicRoomsList: null,
     onPlayerUpdated: null,
+    onFullSync: null,
 
     /**
      * Connect to WebSocket server
@@ -164,6 +165,13 @@ const Socket = {
                 if (this.onPlayerUpdated) this.onPlayerUpdated(message);
                 break;
 
+            case 'FULL_SYNC':
+                this.playerId = message.data.playerId;
+                this.roomCode = message.data.roomCode;
+                this.isHost = message.data.playerId === message.data.hostId;
+                if (this.onFullSync) this.onFullSync(message.data);
+                break;
+
             case 'ERROR':
                 console.error('Server error:', message.message);
                 if (this.onError) this.onError(new Error(message.message));
@@ -180,7 +188,10 @@ const Socket = {
      */
     send(message) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('Sending:', message.type, message);
             this.ws.send(JSON.stringify(message));
+        } else {
+            console.warn('Cannot send message, socket not open:', message.type);
         }
     },
 
@@ -220,10 +231,28 @@ const Socket = {
      * Join an existing room
      */
     joinRoom(roomCode, playerName = null) {
+        console.log(`Joining room ${roomCode}...`);
+        this.socketType = 'join';
+        this.roomCode = roomCode.toUpperCase();
         this.send({
             type: 'JOIN_ROOM',
-            roomCode: roomCode.toUpperCase(),
+            roomCode: this.roomCode,
             playerName
+        });
+    },
+
+    /**
+     * Rejoin an existing room
+     */
+    rejoinRoom(roomCode, playerId) {
+        console.log(`Rejoining room ${roomCode} with player ID ${playerId}...`);
+        this.socketType = 'rejoin';
+        this.roomCode = roomCode.toUpperCase();
+        this.playerId = playerId;
+        this.send({
+            type: 'REJOIN_ROOM',
+            roomCode: this.roomCode,
+            playerId
         });
     },
 
