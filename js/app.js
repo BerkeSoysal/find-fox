@@ -308,15 +308,23 @@ const App = {
      * Show join room screen
      */
     showJoinRoom() {
-        const code = prompt('Enter 4-character Room Code:');
-        if (code) {
-            const formattedCode = code.trim().toUpperCase();
-            if (formattedCode.length === 4) {
-                Socket.joinRoom(formattedCode);
-            } else {
-                this.showError('Invalid room code format');
-            }
+        this.showScreen('join-room-screen');
+        document.getElementById('join-name-input').focus();
+    },
+
+    /**
+     * Join game from the join screen
+     */
+    joinGameFromScreen() {
+        const name = document.getElementById('join-name-input').value.trim();
+        const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+
+        if (code.length !== 4) {
+            this.showError('Please enter a 4-character room code');
+            return;
         }
+
+        Socket.joinRoom(code, name || null);
     },
 
     /**
@@ -339,7 +347,7 @@ const App = {
      * Join an existing room
      */
     joinRoom() {
-        // This function is now handled by showJoinRoom with a prompt
+        // Legacy/Direct call
         this.showJoinRoom();
     },
 
