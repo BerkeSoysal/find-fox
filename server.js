@@ -724,30 +724,24 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
-                // Generate a default name if not provided
-                let name = message.playerName;
-                if (!name || name.trim() === '') {
+                // Check for duplicate name and auto-resolve
+                let finalName = message.playerName || '';
+                if (!finalName || finalName.trim() === '') {
                     const count = room.players.size + 1;
-                    name = `Player ${count}`;
-
-                    // Ensure name is unique
-                    let suffix = 1;
-                    const existingNames = Array.from(room.players.values()).map(p => p.name.toLowerCase());
-                    while (existingNames.includes(name.toLowerCase())) {
-                        name = `Player ${count}-${suffix}`;
-                        suffix++;
-                    }
+                    finalName = `Player ${count}`;
                 }
 
-                // Check for duplicate name if provided by user
+                // Ensure name is unique by appending number if needed
+                let originalName = finalName;
+                let suffix = 2;
                 const existingNames = Array.from(room.players.values()).map(p => p.name.toLowerCase());
-                if (message.playerName && existingNames.includes(message.playerName.toLowerCase())) {
-                    ws.send(JSON.stringify({
-                        type: 'ERROR',
-                        message: 'Name already taken'
-                    }));
-                    return;
+
+                while (existingNames.includes(finalName.toLowerCase())) {
+                    finalName = `${originalName} ${suffix}`;
+                    suffix++;
                 }
+
+                const name = finalName; // Use the resolved unique name
 
                 playerId = generatePlayerId();
                 roomCode = room.code;

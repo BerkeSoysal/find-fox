@@ -78,9 +78,29 @@ const App = {
     },
 
     /**
+     * Generate a random 2-word name
+     */
+    generateRandomName() {
+        const adjectives = ['Happy', 'Swift', 'Bright', 'Calm', 'Eager', 'Fuzzy', 'Jolly', 'Brave', 'Gentle', 'Proud', 'Lucky', 'Mighty'];
+        const nouns = ['Rabbit', 'Fox', 'Panda', 'Eagle', 'Tiger', 'Bear', 'Lion', 'Hawk', 'Wolf', 'Dolphin', 'Badger', 'Otter'];
+
+        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+
+        return `${adj} ${noun}`;
+    },
+
+    /**
      * Initialize app
      */
     async init() {
+        // Pre-fill a random name safely
+        const randomName = this.generateRandomName();
+        const hostInput = document.getElementById('host-name-input');
+        const joinInput = document.getElementById('join-name-input');
+        if (hostInput) hostInput.value = randomName;
+        if (joinInput) joinInput.value = randomName;
+
         this.setupSocketHandlers();
         this.updateConnectionStatus('connecting');
 
@@ -115,8 +135,8 @@ const App = {
                 Socket.rejoinRoom(path, savedSession.playerId);
             } else {
                 console.log(`No session for room ${path}, joining as new player...`);
-                // Join immediately with a default name
-                Socket.joinRoom(path);
+                // Join immediately with a random name
+                Socket.joinRoom(path, this.generateRandomName());
             }
         } else if (path === '') {
             console.log('Root path detected, showing welcome screen.');
