@@ -98,6 +98,35 @@
     </div>
 
 
+    <!-- Join Room Screen -->
+    <div id="join-room-screen" class="screen">
+      <div class="glass-card">
+        <h2 class="mb-lg">👥 Join Game</h2>
+        <p class="text-muted mb-lg">Enter the room code to join</p>
+
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <input type="text" id="join-name-input" class="form-input" placeholder="Enter your name..." maxlength="20"
+            onkeypress="if(event.key==='Enter') document.getElementById('join-code-input').focus()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Room Code</label>
+          <input type="text" id="join-code-input" class="form-input room-code-input" placeholder="ABCD" maxlength="4"
+            style="text-transform: uppercase;" onkeypress="if(event.key==='Enter') App.joinGameFromScreen()">
+        </div>
+
+        <button class="btn btn-primary btn-block" onclick="App.joinGameFromScreen()">
+          Join Room
+        </button>
+
+        <button class="btn btn-secondary btn-block mt-lg" onclick="App.showWelcome()">
+          ← Back
+        </button>
+      </div>
+    </div>
+
+
     <!-- Lobby Screen -->
     <div id="lobby-screen" class="screen">
       <div class="glass-card">
@@ -152,6 +181,11 @@
         <div id="guest-message" class="mt-xl text-center" style="display: none;">
           <p class="text-muted">Waiting for host to start the game...</p>
         </div>
+
+        <button class="btn btn-secondary btn-block mt-lg" style="border-color: rgba(239, 68, 68, 0.5); color: #ef4444;"
+          onclick="App.leaveGame()">
+          Leave Room
+        </button>
       </div>
     </div>
 
@@ -325,6 +359,11 @@
         <div id="results-guest-message" class="mt-xl text-center" style="display: none;">
           <p class="text-muted">Waiting for host to start next round...</p>
         </div>
+
+        <button class="btn btn-secondary btn-block mt-lg" style="border-color: rgba(239, 68, 68, 0.5); color: #ef4444;"
+          onclick="App.leaveGame()">
+          Leave Game
+        </button>
       </div>
     </div>
 

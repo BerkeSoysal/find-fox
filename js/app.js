@@ -78,9 +78,29 @@ const App = {
     },
 
     /**
+     * Generate a random 2-word name
+     */
+    generateRandomName() {
+        const adjectives = ['Happy', 'Swift', 'Bright', 'Calm', 'Eager', 'Fuzzy', 'Jolly', 'Brave', 'Gentle', 'Proud', 'Lucky', 'Mighty'];
+        const nouns = ['Rabbit', 'Fox', 'Panda', 'Eagle', 'Tiger', 'Bear', 'Lion', 'Hawk', 'Wolf', 'Dolphin', 'Badger', 'Otter'];
+
+        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+
+        return `${adj} ${noun}`;
+    },
+
+    /**
      * Initialize app
      */
     async init() {
+        // Pre-fill a random name safely
+        const randomName = this.generateRandomName();
+        const hostInput = document.getElementById('host-name-input');
+        const joinInput = document.getElementById('join-name-input');
+        if (hostInput) hostInput.value = randomName;
+        if (joinInput) joinInput.value = randomName;
+
         this.setupSocketHandlers();
         this.updateConnectionStatus('connecting');
 
@@ -115,8 +135,8 @@ const App = {
                 Socket.rejoinRoom(path, savedSession.playerId);
             } else {
                 console.log(`No session for room ${path}, joining as new player...`);
-                // Join immediately with a default name
-                Socket.joinRoom(path);
+                // Join immediately with a random name
+                Socket.joinRoom(path, this.generateRandomName());
             }
         } else if (path === '') {
             console.log('Root path detected, showing welcome screen.');
@@ -308,15 +328,23 @@ const App = {
      * Show join room screen
      */
     showJoinRoom() {
-        const code = prompt('Enter 4-character Room Code:');
-        if (code) {
-            const formattedCode = code.trim().toUpperCase();
-            if (formattedCode.length === 4) {
-                Socket.joinRoom(formattedCode);
-            } else {
-                this.showError('Invalid room code format');
-            }
+        this.showScreen('join-room-screen');
+        document.getElementById('join-name-input').focus();
+    },
+
+    /**
+     * Join game from the join screen
+     */
+    joinGameFromScreen() {
+        const name = document.getElementById('join-name-input').value.trim();
+        const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+
+        if (code.length !== 4) {
+            this.showError('Please enter a 4-character room code');
+            return;
         }
+
+        Socket.joinRoom(code, name || null);
     },
 
     /**
@@ -339,7 +367,7 @@ const App = {
      * Join an existing room
      */
     joinRoom() {
-        // This function is now handled by showJoinRoom with a prompt
+        // Legacy/Direct call
         this.showJoinRoom();
     },
 
@@ -380,17 +408,20 @@ const App = {
      */
     updateLobbyPlayers(players) {
         this.players = players;
+
+        // Update local host status
+        const me = players.find(p => p.id === Socket.playerId);
+        if (me && me.isHost !== Socket.isHost) {
+            Socket.isHost = me.isHost;
+            this.updateLobbyControls();
+        }
+
         const container = document.getElementById('lobby-players');
         if (!container) return;
 
         // Efficient update: only update the DOM if the user is NOT typing
         const activeInput = document.activeElement;
         if (activeInput && activeInput.classList.contains('player-name-input')) {
-            // Check if context has changed (e.g. player count changed)
-            // If the number of players changed, we MUST re-render to show new players
-            // but we'll try to preserve the cursor position/value if possible.
-            // For now, if someone is typing, we skip re-rendering the whole container
-            // unless the player count changed.
             const currentItems = container.querySelectorAll('.lobby-player').length;
             if (currentItems === players.length) {
                 return;
@@ -436,6 +467,41 @@ const App = {
                 ? `Start Game (${3 - connectedCount} more needed)`
                 : 'Start Game 🎮';
         }
+    },
+
+    /**
+     * Update lobby controls based on host status
+     */
+    updateLobbyControls() {
+        if (Socket.isHost) {
+            document.getElementById('host-controls').style.display = 'block';
+            document.getElementById('host-timer-settings').style.display = 'block';
+            document.getElementById('guest-message').style.display = 'none';
+            document.getElementById('guest-timer-status').style.display = 'none';
+        } else {
+            document.getElementById('host-controls').style.display = 'none';
+            document.getElementById('host-timer-settings').style.display = 'none';
+            document.getElementById('guest-message').style.display = 'block';
+            document.getElementById('guest-timer-status').style.display = 'block';
+        }
+    },
+
+    /**
+     * Leave the current game
+     */
+    leaveGame() {
+        Socket.leaveGame();
+
+        // Clear local session
+        if (Socket.roomCode) {
+            localStorage.removeItem(`fox_game_${Socket.roomCode}`);
+        }
+
+        // Reset state
+        this.clearGameState();
+
+        // Go to welcome
+        this.showWelcome();
     },
 
     /**
