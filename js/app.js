@@ -380,17 +380,20 @@ const App = {
      */
     updateLobbyPlayers(players) {
         this.players = players;
+
+        // Update local host status
+        const me = players.find(p => p.id === Socket.playerId);
+        if (me && me.isHost !== Socket.isHost) {
+            Socket.isHost = me.isHost;
+            this.updateLobbyControls();
+        }
+
         const container = document.getElementById('lobby-players');
         if (!container) return;
 
         // Efficient update: only update the DOM if the user is NOT typing
         const activeInput = document.activeElement;
         if (activeInput && activeInput.classList.contains('player-name-input')) {
-            // Check if context has changed (e.g. player count changed)
-            // If the number of players changed, we MUST re-render to show new players
-            // but we'll try to preserve the cursor position/value if possible.
-            // For now, if someone is typing, we skip re-rendering the whole container
-            // unless the player count changed.
             const currentItems = container.querySelectorAll('.lobby-player').length;
             if (currentItems === players.length) {
                 return;
@@ -436,6 +439,41 @@ const App = {
                 ? `Start Game (${3 - connectedCount} more needed)`
                 : 'Start Game 🎮';
         }
+    },
+
+    /**
+     * Update lobby controls based on host status
+     */
+    updateLobbyControls() {
+        if (Socket.isHost) {
+            document.getElementById('host-controls').style.display = 'block';
+            document.getElementById('host-timer-settings').style.display = 'block';
+            document.getElementById('guest-message').style.display = 'none';
+            document.getElementById('guest-timer-status').style.display = 'none';
+        } else {
+            document.getElementById('host-controls').style.display = 'none';
+            document.getElementById('host-timer-settings').style.display = 'none';
+            document.getElementById('guest-message').style.display = 'block';
+            document.getElementById('guest-timer-status').style.display = 'block';
+        }
+    },
+
+    /**
+     * Leave the current game
+     */
+    leaveGame() {
+        Socket.leaveGame();
+
+        // Clear local session
+        if (Socket.roomCode) {
+            localStorage.removeItem(`fox_game_${Socket.roomCode}`);
+        }
+
+        // Reset state
+        this.clearGameState();
+
+        // Go to welcome
+        this.showWelcome();
     },
 
     /**

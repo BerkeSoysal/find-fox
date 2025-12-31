@@ -113,6 +113,11 @@ const Socket = {
                 if (this.onPlayerDisconnected) this.onPlayerDisconnected(message);
                 break;
 
+            case 'PLAYER_LEFT':
+                // Treat same as disconnected for UI purposes usually, but might want custom logic
+                if (this.onPlayerDisconnected) this.onPlayerDisconnected(message);
+                break;
+
             case 'GAME_STARTED':
                 if (this.onGameStarted) this.onGameStarted(message);
                 break;
@@ -341,6 +346,18 @@ const Socket = {
         this.send({
             type: 'PLAY_AGAIN'
         });
+    },
+
+    /**
+     * Leave the game
+     */
+    leaveGame() {
+        this.send({
+            type: 'LEAVE_GAME'
+        });
+        // Disconnect socket immediately after sending
+        // setTimeout(() => this.disconnect(), 100);
+        // Better to just clear local state in App, let socket stay open or close as needed logic in App
     },
 
     /**
